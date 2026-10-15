@@ -10,7 +10,8 @@
 *.key
 
 # --- 虚拟环境 ---
-.venv/
+# 用通配符，顺带覆盖 .venv-old / .venv-backup 之类的备份目录
+.venv*/
 venv/
 env/
 ENV/

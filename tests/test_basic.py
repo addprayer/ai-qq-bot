@@ -321,12 +321,30 @@ def _has_git_repo() -> bool:
     return _git("rev-parse", "--is-inside-work-tree").stdout.strip() == "true"
 
 
+@pytest.mark.skipif(not _has_git_repo(), reason="尚未初始化 Git 仓库")
 def test_gitignore_covers_sensitive_paths() -> None:
-    """.gitignore 必须包含所有敏感/无用文件规则。"""
-    text = (PROJECT_ROOT / ".gitignore").read_text(encoding="utf-8")
-    required = [".env", ".venv/", "__pycache__/", "logs/", "data/", "*.db", ".pytest_cache/"]
-    missing = [item for item in required if item not in text]
-    assert not missing, f".gitignore 缺少规则：{missing}"
+    """.gitignore 必须真正忽略所有敏感/无用文件。
+
+    这里用 ``git check-ignore`` 实测，而不是匹配 .gitignore 的文本——
+    否则规则写法一变（例如 ``.venv/`` 改成 ``.venv*/``）测试就会误报，
+    而实际忽略效果其实是对的。
+    """
+    targets = [
+        ".env",
+        ".env.local",
+        ".venv/pyvenv.cfg",
+        ".venv-backup/pyvenv.cfg",
+        "venv/pyvenv.cfg",
+        "__pycache__/foo.cpython-314.pyc",
+        "logs/bot_2025-01-01.log",
+        "data/history.db",
+        ".pytest_cache/CACHEDIR.TAG",
+        "napcat/session.token",
+    ]
+    not_ignored = [
+        target for target in targets if _git("check-ignore", "-q", target).returncode != 0
+    ]
+    assert not not_ignored, f"这些路径没有被 .gitignore 忽略：{not_ignored}"
 
 
 @pytest.mark.skipif(not _has_git_repo(), reason="尚未初始化 Git 仓库")
