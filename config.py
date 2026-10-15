@@ -13,6 +13,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Annotated, Literal
 
@@ -277,6 +278,40 @@ def reload_settings() -> Settings:
 
 
 # ---------------------------------------------------------------------------
+# 与 NoneBot 框架配置对接
+# ---------------------------------------------------------------------------
+
+#: 这些字段同时被 NoneBot 自己解析（``nonebot.init`` 内部的 EnvSettingsSource），
+#: 而它只会用 ``json.loads`` 解析，**不接受空字符串、也不接受逗号分隔**。
+#: 只要环境里存在 ``SUPERUSERS=``（空值），启动就会直接报
+#: ``SettingsError: error parsing env var "superusers"``。
+_FRAMEWORK_LIST_FIELDS = ("superusers", "command_start")
+
+
+def sync_framework_env(settings: Settings | None = None) -> dict[str, str]:
+    """把本项目解析过的列表型配置，以合法 JSON 回写到环境变量。
+
+    调用时机必须早于 :func:`nonebot.init`。这样无论用户把 ``.env`` 写成
+    ``SUPERUSERS=``、``SUPERUSERS=123,456`` 还是 ``SUPERUSERS=["123"]``，
+    NoneBot 都能拿到一份合法 JSON，不会再启动失败。
+
+    :return: 实际写入的环境变量（便于测试与排查）
+    """
+    settings = settings or get_settings()
+    written: dict[str, str] = {}
+    for field in _FRAMEWORK_LIST_FIELDS:
+        value = getattr(settings, field, None)
+        if value is None:
+            continue
+        # set 排序后输出，保证结果稳定可测
+        items = sorted(str(item) for item in value)
+        text = json.dumps(items, ensure_ascii=False)
+        os.environ[field.upper()] = text
+        written[field.upper()] = text
+    return written
+
+
+# ---------------------------------------------------------------------------
 # 启动自检
 # ---------------------------------------------------------------------------
 
@@ -319,11 +354,14 @@ def validate_runtime_config(settings: Settings | None = None) -> list[str]:
 
 __all__ = [
     "BASE_DIR",
+    "DEFAULT_HISTORY_DB",
     "ENV_FILE",
     "LOG_DIR",
     "ConfigError",
     "Settings",
     "get_settings",
+    "parse_str_list",
     "reload_settings",
+    "sync_framework_env",
     "validate_runtime_config",
 ]

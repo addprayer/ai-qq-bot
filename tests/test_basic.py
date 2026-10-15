@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import compileall
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -184,6 +185,73 @@ def test_settings_repr_masks_secrets(settings) -> None:
     assert TEST_API_KEY not in settings.describe()
     assert TEST_API_KEY not in settings.model_dump_json()
     assert "****" in settings.masked_api_key()
+
+
+# ---------------------------------------------------------------------------
+# 3.1 NoneBot 框架配置兼容性
+#
+# 回归测试：NoneBot 自己也会解析 SUPERUSERS / COMMAND_START，且只认合法 JSON。
+# 只要 .env 里写成 `SUPERUSERS=`（空值）或 `SUPERUSERS=123,456`（逗号分隔），
+# 启动就会抛 `SettingsError: error parsing env var "superusers"`。
+# 这个坑真实发生过，必须锁住。
+# ---------------------------------------------------------------------------
+
+
+def test_sync_framework_env_writes_valid_json(monkeypatch) -> None:
+    """无论 .env 写成哪种形式，回写到环境变量的都必须是 NoneBot 能解析的 JSON。"""
+    import json
+
+    import config
+
+    cases = {
+        # .env 里的原始写法 -> 期望 NoneBot 看到的 JSON
+        "": [],
+        "   ": [],
+        "[]": [],
+        "123456,789012": ["123456", "789012"],
+        '["123456"]': ["123456"],
+        "123456": ["123456"],
+    }
+    for raw in cases:
+        monkeypatch.setenv("SUPERUSERS", raw)
+        monkeypatch.setenv("COMMAND_START", raw or '["/"]')
+        fresh = config.Settings()
+        written = config.sync_framework_env(fresh)
+
+        # 写回环境变量的必须是合法 JSON，且能被 NoneBot 的解析方式读懂
+        parsed = json.loads(written["SUPERUSERS"])
+        assert isinstance(parsed, list)
+        assert parsed == sorted(cases[raw]) or set(parsed) == set(cases[raw])
+        assert json.loads(os.environ["SUPERUSERS"]) == parsed
+
+
+def test_nonebot_init_survives_empty_superusers(monkeypatch) -> None:
+    """空值 / 逗号分隔的 SUPERUSERS 经过规范化后，NoneBot 必须能正常初始化。"""
+    import config
+
+    for raw in ("", "123456,789012", "[]"):
+        monkeypatch.setenv("SUPERUSERS", raw)
+        monkeypatch.setenv("COMMAND_START", '["/"]')
+        fresh = config.Settings()
+        config.sync_framework_env(fresh)
+
+        # 这里若抛 SettingsError，说明兼容处理失效
+        import nonebot
+
+        nonebot.init(driver="~fastapi+~websockets", log_level="CRITICAL")
+        assert nonebot.get_driver().config.superusers is not None
+
+
+def test_env_example_has_no_empty_list_values() -> None:
+    """模板里不允许出现会导致启动失败的“留空列表”写法。"""
+    text = (PROJECT_ROOT / ".env.example").read_text(encoding="utf-8")
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("#") or "=" not in stripped:
+            continue
+        key, _, value = stripped.partition("=")
+        if key.strip() in {"SUPERUSERS", "COMMAND_START", "ONEBOT_WS_URLS"}:
+            assert value.strip(), f".env.example 里 {key} 不能为空（会导致 NoneBot 启动失败）"
 
 
 # ---------------------------------------------------------------------------

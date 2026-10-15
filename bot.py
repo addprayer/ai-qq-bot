@@ -34,6 +34,7 @@ from config import (  # noqa: E402
     LOG_DIR,
     ConfigError,
     get_settings,
+    sync_framework_env,
     validate_runtime_config,
 )
 from src.logging_setup import setup_logging  # noqa: E402
@@ -65,6 +66,11 @@ except ConfigError as exc:
 # ---------------------------------------------------------------------------
 # 2. 初始化 NoneBot
 # ---------------------------------------------------------------------------
+# 关键：NoneBot 自己也会解析 SUPERUSERS / COMMAND_START，而且**只认合法 JSON**
+# （写成空值或逗号分隔都会让它抛 SettingsError 导致启动失败）。
+# 所以先把本项目规范化过的值回写到环境变量，再 init。
+sync_framework_env(settings)
+
 nonebot.init(
     host=settings.host,
     port=settings.port,
