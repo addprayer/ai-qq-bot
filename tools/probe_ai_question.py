@@ -20,9 +20,32 @@ import time
 
 import websockets
 
-URL = f"ws://127.0.0.1:{os.environ.get('PROBE_PORT', '8080')}/onebot/v11/ws"
-TOKEN = os.environ.get("PROBE_TOKEN", "dev-local-token-please-change")
+HOST = os.environ.get("PROBE_HOST", "127.0.0.1")
+PORT = os.environ.get("PROBE_PORT", "8080")
+URL = f"ws://{HOST}:{PORT}/onebot/v11/ws"
 SELF_ID = 10000
+
+
+def _load_token() -> str:
+    """优先用环境变量，其次从项目 .env 读取，最后退回示例值（避免 403）。"""
+    token = os.environ.get("PROBE_TOKEN")
+    if token:
+        return token
+    try:
+        import sys
+        from pathlib import Path
+
+        root = Path(__file__).resolve().parent.parent
+        if str(root) not in sys.path:
+            sys.path.insert(0, str(root))
+        from config import get_settings
+
+        return get_settings().access_token
+    except Exception:
+        return "dev-local-token-please-change"
+
+
+TOKEN = _load_token()
 GROUP_ID = 123456789
 USER_ID = 10001
 

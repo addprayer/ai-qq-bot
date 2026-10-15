@@ -35,8 +35,33 @@ import websockets
 HOST = os.environ.get("PROBE_HOST", "127.0.0.1")
 PORT = os.environ.get("PROBE_PORT", "8080")
 URL = f"ws://{HOST}:{PORT}/onebot/v11/ws"
-TOKEN = os.environ.get("PROBE_TOKEN", "dev-local-token-please-change")
 SELF_ID = int(os.environ.get("PROBE_SELF_ID", "10000"))
+
+
+def _load_token() -> str:
+    """优先用环境变量，其次从项目 .env 读取，最后退回示例值。
+
+    这样改了 .env 里的 ONEBOT_ACCESS_TOKEN 之后，本脚本会自动跟着变，
+    不会因为两边不一致而莫名其妙收到 403。
+    """
+    token = os.environ.get("PROBE_TOKEN")
+    if token:
+        return token
+    try:
+        import sys
+        from pathlib import Path
+
+        root = Path(__file__).resolve().parent.parent
+        if str(root) not in sys.path:
+            sys.path.insert(0, str(root))
+        from config import get_settings
+
+        return get_settings().access_token
+    except Exception:
+        return "dev-local-token-please-change"
+
+
+TOKEN = _load_token()
 GROUP_ID = int(os.environ.get("PROBE_GROUP_ID", "123456789"))
 USER_ID = int(os.environ.get("PROBE_USER_ID", "10001"))
 NICKNAME = os.environ.get("PROBE_NICKNAME", "测试群友")
@@ -168,7 +193,8 @@ async def main(send_message: bool) -> int:
         print(f"[X] 连接失败：{type(exc).__name__}: {exc}")
         if "403" in str(exc):
             print("    提示：403 通常是 Token 不一致，或缺少 X-Self-ID 头。")
-            print(f"    当前使用的 Token：{TOKEN}")
+            print(f"    当前 Token 长度：{len(TOKEN)}（不打印内容，避免泄露到日志）")
+            print("    请确认 .env 的 ONEBOT_ACCESS_TOKEN 与 NapCat 里填的完全一致。")
         return 1
 
 
