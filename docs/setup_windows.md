@@ -276,58 +276,112 @@ AI_API_KEY=sk-你的真实Key
 > **请务必使用你有权控制的测试小号，不要用主力账号。**
 > 本文只做技术说明，风险请自行评估，后果自负。
 
-### 6.1 下载 NapCat
+### 6.1 选择安装方式
 
-1. 打开官方仓库 <https://github.com/NapNeko/NapCatQQ/releases>
-2. 找到最新版本，下载 **`NapCat.Shell.zip`**（免安装版，最简单）
-3. 解压到一个**路径不含中文和空格**的目录，例如 `D:\NapCat`
-4. 进入该目录，双击 `launcher.bat`（或 `NapCatWinBootMain.exe`）
+NapCat 有两种装法，**新手强烈推荐第二种**：
 
-### 6.2 登录 QQ
+| 方式 | 下载文件 | 特点 |
+| --- | --- | --- |
+| A. 手动版 | `NapCat.Shell.zip`（34 MB） | 复用你已装的 QQ。**若你的 QQ 版本与 NapCat 不匹配，会启动失败**（报 `Cannot find module '...loadNapCat.js'`） |
+| B. **一键版（推荐）** | `NapCat.Shell.Windows.OneKey.zip`（0.9 MB） | **自带一个与 NapCat 匹配的 QQ**，装在自己的目录里，不碰你现有的 QQ，基本不会遇到版本冲突 |
 
-1. 程序会弹出一个二维码窗口（或控制台里显示二维码链接）
-2. 用**测试小号**的手机 QQ **扫码登录**
-3. 按提示完成验证
+> 💡 **实战经验**：手动版要求 QQ 版本与 NapCat 的 `qqnt.json` 声明一致。
+> 如果 QQ 自动更新过（比如升到 9.9.31，而 NapCat 配置写的是 9.9.22），
+> 启动时就会弹 `A JavaScript error occurred in the main process`，
+> 提示 `Cannot find module '...resources\app\loadNapCat.js'`。
+> **遇到这个报错就直接改走一键版**，不要在手动版上折腾。
 
-✅ **成功标志**：控制台出现类似 `账号 <QQ号> 登录成功` 的提示，
-并且窗口里出现 NapCat 的 WebUI 地址（形如 `http://127.0.0.1:6099/webui`）。
+### 6.2 方式 B：一键版安装（推荐）
 
-> 💡 第一次登录后建议在手机 QQ 上开启「登录保护」或「设备锁」，
-> 可以降低风险。
+1. 打开 <https://github.com/NapNeko/NapCatQQ/releases/latest>
+2. 下载 **`NapCat.Shell.Windows.OneKey.zip`**
+3. 解压到**路径不含中文和空格**的位置，例如 `C:\napcat` 或 `D:\NapCat`
+   （**不要放在桌面**，桌面可能被同步/中文路径干扰）
+4. 运行 `NapCatInstaller.exe`，等它自动下载并安装匹配的 QQ，完成后会生成
+   形如 `NapCat.XXXXX.Shell` 的目录
+5. 进入该目录，双击 `napcat.bat`（**需要管理员权限**）
+6. 按控制台提示扫码登录
 
-### 6.3 打开 WebUI 并配置网络
+✅ **成功标志 1**：控制台出现登录成功提示，并打印出 WebUI 地址，形如
 
-1. 在浏览器打开控制台里显示的 WebUI 地址（一般是
-   <http://127.0.0.1:6099/webui>）
-2. 用控制台打印的 **Token** 登录（首次登录后请立即改掉默认密码）
-3. 左侧点击 **`网络配置`**
-4. 点击 **`添加配置`**，选择 **`WebSocket 客户端`**（即「反向 WebSocket」）
-5. 按下表填写：
+```
+[NapCat] [WebUi] WebUi User Panel Url: http://127.0.0.1:6099/webui?token=xxxxxxxx
+```
+
+**复制整行地址**（带 `?token=`）粘到浏览器即可直接进入，不用手输 Token。
+
+✅ **成功标志 2**：浏览器能打开 NapCat 管理界面。
+
+> ⚠️ **`napcat.bat` 的控制台窗口不能关**，关掉 WebUI 就打不开了。
+> 可以最小化，不要点 ×。
+
+### 6.3 方式 A：手动版安装
+
+1. 打开 <https://github.com/NapNeko/NapCatQQ/releases/latest>
+2. 下载 **`NapCat.Shell.zip`**
+3. 解压到**路径不含中文和空格**的目录，例如 `D:\NapCat`
+4. 双击 `launcher.bat`（Windows 11；Windows 10 用 `launcher-win10.bat`）
+5. 按控制台提示登录 QQ
+
+> ⚠️ 若报 `Cannot find module '...loadNapCat.js'`，说明 QQ 版本不匹配，
+> 请改用 [6.2 一键版](#62-方式-b一键版安装推荐)。
+
+### 6.4 首次进入 WebUI
+
+1. 用带 `?token=` 的地址进入（或手输 Token，Token 存在
+   `<NapCat目录>/versions/<版本>/resources/app/napcat/config/webui.json` 的 `token` 字段）
+2. **首次进入会强制要求修改密码**，不改则大部分功能被禁用 → 请改成你自己的密码并牢记
+
+### 6.5 配置反向 WebSocket（关键一步）
+
+**先启动机器人**（另开一个普通 PowerShell 窗口，不要关）：
+
+```powershell
+cd <项目目录>\QQBot
+.\.venv\Scripts\python.exe bot.py
+```
+
+看到 `Uvicorn running on http://127.0.0.1:8080` 后再配置 NapCat：
+
+浏览器打开 WebUI → 左侧 **`网络配置`** → **`新建`** → 选择 **`WebSocket 客户端`**
 
 | 字段 | 填什么 | 说明 |
 | --- | --- | --- |
-| 名称 | `nonebot` | 随便起 |
-| URL | `ws://127.0.0.1:8080/onebot/v11/ws` | **必须完全一致**，端口和 `.env` 的 `PORT` 对应 |
-| 令牌 / Token | 你在 4.2 生成的那串随机字符 | **必须和 `.env` 的 `ONEBOT_ACCESS_TOKEN` 一字不差** |
-| 消息格式 | `array` | 必须是 array，不是 string |
-| 启用心跳 | 开启 | 保持连接稳定 |
-| 心跳间隔 | `30` | 秒 |
+| 名称 | `nonebot` | 随便起，唯一即可 |
+| URL | `ws://127.0.0.1:8080/onebot/v11/ws` | **必须完全一致**，端口与 `.env` 的 `PORT` 对应 |
+| 消息格式 | `array` | **必须是 array**，选 string 会解析失败 |
+| Token | 与 `.env` 的 `ONEBOT_ACCESS_TOKEN` **一字不差** | 不一致会返回 403 |
+| 心跳间隔 | `30000` | 毫秒，即 30 秒 |
+| 重连间隔 | `5000` | 保持默认 |
+| 启用 | ✅ **勾选** | 文档里叫「保存时启用」 |
 
-6. 点 **`保存`**，然后确保这条配置的开关是 **开启** 状态
+查看自己的 Token（不要把输出发到公开场合）：
 
-### 6.4 判断连接成功
-
-看**机器人运行的那个 PowerShell 窗口**（先按第七节把机器人跑起来），
-如果出现：
-
-```
-[INFO] nonebot.utils | OneBot V11 | Bot 你的QQ号 connected
+```powershell
+Select-String -Path .env -Pattern "^ONEBOT_ACCESS_TOKEN="
 ```
 
-✅ **连接成功！** 现在去群里发 `@你的机器人 你好` 试试。
+点 **`保存`**，并确认这条配置处于**已启用**状态。
 
-如果机器人窗口没有任何反应，或者 NapCat WebUI 显示连接失败：
-回到 6.3 检查 URL 与 Token 是否完全一致（注意别多复制空格）。
+### 6.6 判断连接成功
+
+看**机器人运行的那个窗口**，出现下面这行就是成功：
+
+```
+[INFO] nonebot.utils | OneBot V11 | Bot <你的QQ号> connected
+```
+
+同时 WebUI 的网络配置列表里，`nonebot` 那条应显示**已连接**。
+
+### 6.7 排错：常见连接问题
+
+| 报错 | 原因 | 解决 |
+| --- | --- | --- |
+| `connect ECONNREFUSED 127.0.0.1:8080` | **机器人没在运行**（NapCat 找不到 8080） | 启动 `bot.py`；NapCat 会在 30 秒内自动重连 |
+| `403` / `Authorization Header is invalid` | Token 两边不一致 | 重新核对 `ONEBOT_ACCESS_TOKEN` |
+| 一直显示未连接 | 网络配置没启用 | 回 WebUI 检查开关 |
+| `A JavaScript error occurred in the main process` + `Cannot find module '...loadNapCat.js'` | QQ 版本与 NapCat 不匹配 | 改用 6.2 的一键版 |
+| 连上后频繁断开 | 心跳没开 | 心跳间隔设 `30000` |
 
 ---
 

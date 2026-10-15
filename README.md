@@ -119,10 +119,18 @@ notepad .env
 
 ### 4. 让它连上 QQ
 
-按 **[docs/setup_windows.md](docs/setup_windows.md)** 里的 NapCat 章节操作：
-登录 QQ → 新建**反向 WebSocket** 客户端 → 地址填 `ws://127.0.0.1:8080/onebot/v11/ws`
-→ Token 填得和 `.env` 一致。连接成功后，机器人窗口里会出现
-`Bot <你的QQ号> connected`。
+按 **[docs/setup_windows.md](docs/setup_windows.md)** 里的 NapCat 章节操作。
+
+> 💡 **强烈建议用「一键版」**（`NapCat.Shell.Windows.OneKey.zip`）：
+> 它自带一个与 NapCat 版本匹配的 QQ，不会和你现有的 QQ 冲突。
+> 手动版（`NapCat.Shell.zip`）要求 QQ 版本与 NapCat 声明的一致，
+> 若 QQ 自动更新过就会报 `Cannot find module '...loadNapCat.js'`。
+
+步骤概览：启动 NapCat 并扫码登录 → 打开 WebUI（改掉初始密码）→
+新建 **WebSocket 客户端**，URL 填 `ws://127.0.0.1:8080/onebot/v11/ws`，
+Token 与 `.env` 一致，消息格式选 `array`，启用并保存。
+
+连接成功后，机器人窗口里会出现 `Bot <你的QQ号> connected`。
 
 ### 5. 不需要 QQ 也能先自测
 
@@ -232,26 +240,30 @@ git push -u origin main
 - DeepSeek 错误分类与中文提示（6 类）
 - 日志密钥脱敏 + `.gitignore` 安全规则
 - 内存与 SQLite 两套历史后端
-- 59 项自动化测试
+- 68 项自动化测试
 
 ### 🧪 已验证方式（重要，请如实阅读）
 
 | 项目 | 验证方式 |
 | --- | --- |
-| 反向 WebSocket 握手 | ✅ **真实启动机器人 + 真实 WebSocket 客户端**，日志出现 `Bot 10000 connected` |
-| 消息处理 → 发送回复 | ✅ **真实端到端**：模拟 OneBot 客户端发群消息，收到机器人的 `send_group_msg` 调用 |
-| DeepSeek 调用与错误处理 | ✅ **真实网络调用**：用占位 Key 请求 DeepSeek，收到 HTTP 401，正确分类为 `auth_failed` 并返回中文提示 |
-| 指令逻辑 / 隔离 / 冷却 / 限长 | ✅ 自动化测试（`tests/test_ai_chat.py`） |
+| 反向 WebSocket 握手 | ✅ **真实启动机器人 + 真实 WebSocket 客户端**，日志出现 `Bot <QQ号> connected` |
+| 消息处理 → 发送回复 | ✅ **真实端到端**：模拟 OneBot 客户端发消息，收到机器人的 `send_group_msg` 调用 |
+| DeepSeek 调用与错误处理 | ✅ **真实网络调用**：占位 Key 请求 DeepSeek 收到 HTTP 401，正确分类为 `auth_failed` |
+| DeepSeek 正常回答 + 上下文 | ✅ **真实 API**：两轮对话，第二轮能复述第一轮内容 |
+| **真实 QQ 收发消息** | ✅ **已用真实 QQ 账号 + NapCat + 真实 DeepSeek 打通**：私聊提问收到回答，日志含 token 用量与耗时（0.71s / 0.83s） |
+| 指令逻辑 / 隔离 / 冷却 / 限长 | ✅ 自动化测试（`tests/test_ai_chat.py`，含私聊场景） |
 | Git 忽略规则 / 密钥扫描 | ✅ 自动化测试（`tests/test_basic.py`） |
 
-### ⚠️ 尚未验证（需要你来做）
+### ⚠️ 尚未验证
 
-| 项目 | 为什么还没验证 | 你需要做什么 |
-| --- | --- | --- |
-| **真实 QQ 群收发消息** | 我无法登录 QQ，也没有你的账号 | 按文档配置 NapCat 并登录测试小号，在群里发 `@机器人 你好` |
-| **真实 DeepSeek 正常回答** | 我没有可用的真实 API Key | 在 `.env` 填入你自己的 Key，再问一次 |
-| **余额不足（402）的真实报错** | 需要真实欠费账号才能复现 | 可跳过；代码里已按 HTTP 402 处理，并有单元测试覆盖 |
-| **`deepseek-reasoner` 模型** | 未用真实 Key 调过该模型 | 把 `AI_MODEL` 改成 `deepseek-reasoner` 自行验证 |
+| 项目 | 原因 |
+| --- | --- |
+| 余额不足（HTTP 402）的真实报错 | 需要欠费账号才能复现；代码已按 HTTP 402 处理，并有单元测试覆盖 |
+| `deepseek-reasoner` 模型 | 未用真实 Key 调用过，可自行把 `AI_MODEL` 改掉验证 |
+| 大规模群聊下的并发表现 | 未做压力测试 |
+
+> 📌 **使用范围提醒**：私聊对**任何能给机器人发消息的人**都会触发 AI（群聊必须 @ 或 `/ai`）。
+> 如果担心被陌生人消耗额度，建议给机器人加私聊白名单（见「十、后续可扩展方向」）。
 
 ---
 
@@ -291,8 +303,9 @@ git push -u origin main
 
 ## 十、后续可扩展方向
 
+- **私聊白名单**：私聊目前对任何发消息的人都触发 AI，建议限制为指定 QQ 号
 - 把 `HISTORY_BACKEND` 改成 `sqlite`，重启后上下文仍在（代码已实现，改配置即可）
-- 增加「只允许指定群使用」的白名单
+- 增加「只允许指定群使用」的群白名单
 - 增加每人每日调用次数上限，进一步控制费用
 - 接入图片理解 / 语音等其他能力
 - 用 `nb-cli` 把 `src/ai_chat.py` 拆成标准插件包，发布到 NoneBot 插件商店
