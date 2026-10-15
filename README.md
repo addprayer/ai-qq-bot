@@ -1,6 +1,6 @@
 # AI QQ 群机器人
 
-**当前版本：v1.0.0** ｜ [更新日志](CHANGELOG.md) ｜ [发布说明](docs/release-notes-v1.0.0.md)
+**当前版本：v1.0.1** ｜ [更新日志](CHANGELOG.md) ｜ [发布说明](docs/release-notes-v1.0.1.md)
 
 一个跑在**你自己的 Windows 电脑**上的 AI QQ 群机器人。
 用 [NapCat](https://github.com/NapNeko/NapCatQQ) 登录 QQ，通过 **OneBot V11 协议**接入

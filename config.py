@@ -38,7 +38,7 @@ DEFAULT_HISTORY_DB: Path = BASE_DIR / "data" / "history.db"
 
 #: 项目版本号。发布新版本时同步修改：
 #: 1) 这里  2) CHANGELOG.md  3) 打 git tag（如 v1.0.0）
-VERSION: str = "1.0.0"
+VERSION: str = "1.0.1"
 
 
 # ---------------------------------------------------------------------------

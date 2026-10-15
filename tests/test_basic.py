@@ -287,6 +287,70 @@ def test_release_notes_file_exists(settings) -> None:
 
 
 # ---------------------------------------------------------------------------
+# 3.3 端口探测工具（供一键启动脚本使用）
+# ---------------------------------------------------------------------------
+
+
+def test_wait_port_detects_open_port() -> None:
+    """wait_port 必须能识别出「有人在监听」。"""
+    import socket
+
+    from tools.wait_port import is_open
+
+    with socket.socket() as server:
+        server.bind(("127.0.0.1", 0))  # 让系统分配一个空闲端口
+        server.listen(1)
+        port = server.getsockname()[1]
+        assert is_open(port) is True
+
+        # 端口关掉之后应该探测不到
+    assert is_open(port) is False
+
+
+def test_wait_port_wait_times_out() -> None:
+    """--wait 在端口始终不可用时要按时返回 False，不能一直等。"""
+    import socket
+    import time
+
+    from tools.wait_port import wait_for
+
+    # 先占一个端口再释放，确保这个端口号当前没人用
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        dead_port = probe.getsockname()[1]
+
+    started = time.monotonic()
+    assert wait_for(dead_port, 1.0, interval=0.2) is False
+    elapsed = time.monotonic() - started
+    assert 0.9 <= elapsed <= 4.0, f"等待时长异常：{elapsed:.2f}s"
+
+
+def test_wait_port_cli_exit_code() -> None:
+    """命令行方式调用时，退出码必须能被批处理正确判断。"""
+    import socket
+
+    script = PROJECT_ROOT / "tools" / "wait_port.py"
+    with socket.socket() as server:
+        server.bind(("127.0.0.1", 0))
+        server.listen(1)
+        port = server.getsockname()[1]
+
+        ok = subprocess.run(
+            [sys.executable, str(script), str(port), "--quiet"],
+            capture_output=True,
+            check=False,
+        )
+        assert ok.returncode == 0, f"端口在监听时应返回 0，实际 {ok.returncode}"
+
+    bad = subprocess.run(
+        [sys.executable, str(script), str(port), "--quiet"],
+        capture_output=True,
+        check=False,
+    )
+    assert bad.returncode == 1, f"端口已关闭时应返回 1，实际 {bad.returncode}"
+
+
+# ---------------------------------------------------------------------------
 # 4. 日志脱敏
 # ---------------------------------------------------------------------------
 

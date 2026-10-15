@@ -13,6 +13,46 @@
 
 ---
 
+## [1.0.1] - 2026-10-15
+
+修复 v1.0.0 中一键启动脚本无法工作的严重问题。
+
+### 修复
+
+- **修复 `start_all.bat` 启动 NapCat 失败**：
+  原先使用 `start "NapCat" cmd /c "cd /d ^"<路径>^" && napcat.bat"`，
+  其中的引号转义在带空格的路径下会被 cmd 解析错乱，报错
+  `'napcat.bat"' is not recognized as an internal or external command`。
+  现改用 `start "NapCat" /d "<路径>" cmd /c "napcat.bat"`，
+  **完全不做引号转义**，从根本上避免这类问题。
+
+- **修复 NapCat 已运行时的误启动**：
+  端口检测原先使用 PowerShell 的 `Test-NetConnection`，在部分环境下会误判为空闲
+  （`TcpTestSucceeded: False`），导致重复拉起 NapCat。
+  现改用新增的 `tools/wait_port.py`（直接 socket 连接），检测更可靠。
+
+- **修复等待循环在输入重定向环境下报错**：
+  原先用 `timeout /t 2`，在输入被重定向时会报
+  `ERROR: Input redirection is not supported`。现改用
+  `powershell -Command "Start-Sleep"`。
+
+- 修正 `start_all.bat` 缺少 `EnableDelayedExpansion` 导致
+  for 循环内读不到变量的问题。
+
+### 新增
+
+- `tools/wait_port.py`：端口探测小工具，可单独使用
+  （`python tools/wait_port.py 6099` 或 `--wait 90`），
+  这样批处理里不必再内联易错的 Python/PowerShell 一行命令。
+
+### 测试
+
+- 用桩进程对 `start_all.bat` 做了双分支验证：
+  - 端口已占用 → 正确跳过启动，不重复拉起
+  - 端口空闲 → 桩在**含空格的目录**中确实被执行，且无引号转义报错
+
+---
+
 ## [1.0.0] - 2026-10-15
 
 第一个正式版本。经过真实 QQ 账号 + NapCat + DeepSeek 端到端验证。
