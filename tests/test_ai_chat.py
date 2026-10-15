@@ -387,6 +387,54 @@ async def test_ai_not_configured(settings) -> None:
 
 
 # ---------------------------------------------------------------------------
+# 私聊
+# ---------------------------------------------------------------------------
+
+
+async def test_private_help_command(harness) -> None:
+    """私聊 /帮助 要有响应。"""
+    result = await harness.send_private_message("/帮助", user_id=10001)
+    assert result["responded"] is True
+    assert any("使用说明" in text for text in result["texts"])
+
+
+async def test_private_plain_text_triggers_ai(harness) -> None:
+    """私聊里 to_me 恒为 True，所以直接发问题就会触发（不需要 @）。"""
+    result = await harness.send_private_message("你好，介绍一下你自己", user_id=10001)
+    assert result["to_me"] is True
+    assert harness.ai.calls[-1][0] == "你好，介绍一下你自己"
+    assert any("这是测试回复" in text for text in result["texts"])
+
+
+async def test_private_ai_command(harness) -> None:
+    await harness.send_private_message("/ai 什么是二分查找", user_id=10001)
+    assert harness.ai.calls[-1][0] == "什么是二分查找"
+
+
+async def test_private_and_group_history_are_isolated(harness) -> None:
+    """私聊记忆与群聊记忆必须互不影响（私聊的 group 键是 "private"）。"""
+    await harness.send_private_message("私聊里说的话", user_id=10001)
+    await harness.send_group_message("群里说的话", user_id=10001, group_id=555, at_me=True)
+
+    history = harness.plugin._history
+    assert history.turn_count("private", "10001") == 1
+    assert history.turn_count("555", "10001") == 1
+
+    # 群里的那次调用不应该带上私聊的历史
+    assert harness.ai.calls[-1][1] == []
+
+
+async def test_private_clear_only_affects_private(harness) -> None:
+    await harness.send_private_message("私聊内容", user_id=10001)
+    await harness.send_group_message("群内容", user_id=10001, group_id=555, at_me=True)
+
+    result = await harness.send_private_message("/清空", user_id=10001)
+    assert any("已清除" in text and "私聊" in text for text in result["texts"])
+    assert harness.plugin._history.turn_count("private", "10001") == 0
+    assert harness.plugin._history.turn_count("555", "10001") == 1  # 群记忆不受影响
+
+
+# ---------------------------------------------------------------------------
 # 错误翻译
 # ---------------------------------------------------------------------------
 

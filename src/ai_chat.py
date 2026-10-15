@@ -277,7 +277,14 @@ async def _handle_ai_command_loose(event: Event, matcher: Matcher) -> None:
 
 @matcher_mention.handle()
 async def _handle_mention(bot: Bot, event: Event, matcher: Matcher) -> None:
-    # 指令类消息在更早的优先级已被 block 拦住，能走到这里的都是普通提问
+    """被 @ 时的兜底响应（私聊也会走到这里）。
+
+    注意两点：
+
+    * 指令类消息（/帮助、/清空、/ai）在更早的优先级已被 block 拦住；
+    * **私聊消息的 ``to_me`` 恒为 True**，所以私聊里直接发问题就会触发，
+      不需要 @（这是 OneBot V11 适配器 ``_check_at_me`` 的行为）。
+    """
     group_id, user_id = _session_ids(event)
 
     # 冷却：直接在这里提示并结束。不能放到单独的响应器里——

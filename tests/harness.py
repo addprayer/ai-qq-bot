@@ -14,7 +14,14 @@ from __future__ import annotations
 import time
 from typing import Any
 
-from nonebot.adapters.onebot.v11 import Adapter, Bot, GroupMessageEvent, Message, MessageSegment
+from nonebot.adapters.onebot.v11 import (
+    Adapter,
+    Bot,
+    GroupMessageEvent,
+    Message,
+    MessageSegment,
+    PrivateMessageEvent,
+)
 from nonebot.exception import FinishedException
 
 SELF_ID = "10000"
@@ -146,6 +153,46 @@ class BotHarness:
             # NoneBot 内部会自行捕获它，所以通常都是 False。
             "finished": finished,
             # 更可靠的判断：机器人这次是否真的发了消息
+            "responded": bool(new_calls),
+            "calls": new_calls,
+            "texts": extract_texts(new_calls),
+            "to_me": bool(event.to_me),
+        }
+
+    # -- 私聊 --------------------------------------------------------------
+
+    def make_private_event(self, text: str, *, user_id: int, message_id: int = 2001) -> dict[str, Any]:
+        """构造一条私聊消息事件。"""
+        return {
+            "post_type": "message",
+            "message_type": "private",
+            "sub_type": "friend",
+            "message_id": message_id,
+            "user_id": user_id,
+            "time": int(time.time()),
+            "self_id": int(SELF_ID),
+            "raw_message": text,
+            "font": 0,
+            "sender": {"user_id": user_id, "nickname": "测试好友"},
+            "message": [{"type": "text", "data": {"text": text}}],
+        }
+
+    async def send_private_message(self, text: str, *, user_id: int) -> dict[str, Any]:
+        """投递一条私聊消息。私聊里 ``to_me`` 恒为 True，不需要 @。"""
+        before = len(self.api_calls)
+        event = PrivateMessageEvent.model_validate(self.make_private_event(text, user_id=user_id))
+
+        finished = False
+        try:
+            await self.bot.handle_event(event)
+        except FinishedException:
+            finished = True
+        except Exception as exc:  # noqa: BLE001
+            raise AssertionError(f"处理私聊消息时出现未预期异常：{type(exc).__name__}: {exc}") from exc
+
+        new_calls = self.api_calls[before:]
+        return {
+            "finished": finished,
             "responded": bool(new_calls),
             "calls": new_calls,
             "texts": extract_texts(new_calls),
