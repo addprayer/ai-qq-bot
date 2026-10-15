@@ -35,6 +35,8 @@
 QQBot/
 ├── bot.py                    # 启动入口：读配置 → 起日志 → 注册适配器 → 加载插件 → 启动
 ├── config.py                 # 配置定义与校验（从 .env 读取，密钥用 SecretStr）
+├── start_all.bat             # ★日常使用：一键启动 NapCat + 机器人
+├── start_bot.bat             # 只启动机器人（支持 --check 自检）
 ├── requirements.txt          # 依赖清单（已锁定版本）
 ├── pytest.ini                # 测试配置
 ├── .env.example              # 配置模板（只有占位符，可安全上传）
@@ -77,7 +79,42 @@ data/history.db               # 仅当 HISTORY_BACKEND=sqlite 时生成
 
 ---
 
-## 三、快速开始
+## 三、日常启动（装好之后每次这样用）
+
+首次安装请先看 [四、快速开始](#四快速开始-首次安装)。**装好之后，日常启动只需要双击一个文件。**
+
+| 文件 | 作用 |
+| --- | --- |
+| **`start_all.bat`** | **推荐**：自动启动 NapCat（会弹 UAC 提权窗口）+ 机器人 |
+| `start_bot.bat` | 只启动机器人（NapCat 已经在运行时用）|
+| `start_bot.bat --check` | 只做健康检查：虚拟环境、`.env`、API Key、NapCat 是否就绪 |
+
+**操作步骤**：
+
+1. 打开 `QQBot` 文件夹
+2. 双击 **`start_all.bat`**
+3. 弹出 UAC 提示时点 **「是」**（NapCat 需要管理员权限）
+4. 出现一个 `NapCat` 窗口和一个机器人窗口 —— **两个都最小化，不要关**
+
+✅ **成功标志**：机器人窗口里出现
+```
+[INFO] nonebot.utils | OneBot V11 | Bot <你的QQ号> connected
+```
+
+然后就能在 QQ 里 `@机器人 提问` 了。
+
+> ⚠️ **不要把两个窗口点 ×**。想停止机器人，在窗口里按 `Ctrl + C`。
+> ⚠️ NapCat 如果提示要扫码登录，用手机 QQ 扫一下即可。
+> ⚠️ 如果你把 NapCat 装在别的位置，用记事本打开 `start_all.bat`，
+> 修改 `NAPCAT_DIR=` 那一行。
+
+**开机后需要重新双击一次**，这两个程序不会自动开机启动。
+（想开机自启，可以把 `start_all.bat` 的快捷方式放进
+`文件资源管理器地址栏输入 shell:startup` 打开的文件夹里。）
+
+---
+
+## 四、快速开始（首次安装）
 
 完整细节见 **[docs/setup_windows.md](docs/setup_windows.md)**，这里是精简版。
 
@@ -147,7 +184,7 @@ Token 与 `.env` 一致，消息格式选 `array`，启用并保存。
 
 ---
 
-## 四、配置项说明（.env）
+## 五、配置项说明（.env）
 
 | 变量 | 说明 | 默认值 |
 | --- | --- | --- |
@@ -174,7 +211,7 @@ Token 与 `.env` 一致，消息格式选 `array`，启用并保存。
 
 ---
 
-## 五、测试
+## 六、测试
 
 ```powershell
 # 全部测试
@@ -202,7 +239,7 @@ Token 与 `.env` 一致，消息格式选 `array`，启用并保存。
 
 ---
 
-## 六、上传到 GitHub
+## 七、上传到 GitHub
 
 > 详细步骤（含 GitHub 网页操作与浏览器授权）见
 > [docs/setup_windows.md](docs/setup_windows.md#七上传到-github)。
@@ -229,7 +266,7 @@ git push -u origin main
 
 ---
 
-## 七、当前完成情况
+## 八、当前完成情况
 
 ### ✅ 已实现并通过测试
 
@@ -267,7 +304,7 @@ git push -u origin main
 
 ---
 
-## 八、常见报错
+## 九、常见报错
 
 | 现象 | 原因与解决 |
 | --- | --- |
@@ -288,7 +325,7 @@ git push -u origin main
 
 ---
 
-## 九、安全提醒
+## 十、安全提醒
 
 1. `.env` 里全是密钥，**永远不要提交到 Git**。`.gitignore` 已排除，但你自己也别手动 `git add -f`。
 2. `HOST` 保持 `127.0.0.1`。改成 `0.0.0.0` 等于把机器人管理端口暴露到公网，非常危险。
@@ -301,7 +338,7 @@ git push -u origin main
 
 ---
 
-## 十、后续可扩展方向
+## 十一、后续可扩展方向
 
 - **私聊白名单**：私聊目前对任何发消息的人都触发 AI，建议限制为指定 QQ 号
 - 把 `HISTORY_BACKEND` 改成 `sqlite`，重启后上下文仍在（代码已实现，改配置即可）
