@@ -1,0 +1,31 @@
+# AI QQ 群机器人 - Python 依赖
+# 安装： .\.venv\Scripts\python.exe -m pip install -r requirements.txt
+#
+# 版本策略：全部锁定到经过实测的版本，保证「换台电脑也能装出一样的版本」。
+# 实测环境：Windows 11 + Python 3.14.5（Python 3.10+ 均可运行）。
+
+# --- 机器人框架 ---
+nonebot2==2.5.0
+nonebot-adapter-onebot==2.4.6
+
+# --- AI 接口（DeepSeek 使用 OpenAI 兼容协议）---
+# 注意：openai 3.x 自带 HTTP 客户端依赖（httpx2），不需要额外安装 httpx
+openai==3.31.0
+
+# --- 配置读取（从 .env 读取，带类型校验）---
+pydantic-settings==2.16.0
+python-dotenv==1.2.4
+
+# --- ASGI 驱动器（nonebot2 的 fastapi 驱动器）---
+fastapi==0.143.1
+uvicorn==0.54.0
+
+# --- 反向 WebSocket 支持（NapCat 用反向 WS 连过来时必须装）---
+websockets==17.2
+
+# --- 测试 ---
+pytest==9.1.1
+pytest-asyncio==1.4.0
+
+# --- 可选：以后要把对话历史持久化到 SQLite 文件时再打开 ---
+# aiosqlite==0.21.0

@@ -1,0 +1,73 @@
+# =============================================================================
+# 绝对不要提交到 Git 的文件
+# =============================================================================
+
+# --- 密钥与配置（最重要！）---
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# --- 虚拟环境 ---
+.venv/
+venv/
+env/
+ENV/
+
+# --- Python 缓存 ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+
+# --- 测试与覆盖率 ---
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+.tox/
+.nox/
+
+# --- 运行期产生的数据与日志 ---
+logs/
+*.log
+data/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# --- NapCat / QQ 登录凭据（一定要排除）---
+napcat/
+NapCat/
+*NapCat*/
+config/onebot11_*.json
+session.token
+device.json
+cache/
+.cache/
+*.session
+*.cookie
+cookies.txt
+
+# --- 编辑器 / 系统 ---
+.idea/
+.vscode/
+*.swp
+*~
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# --- 临时文件 ---
+.tmp/
+tmp/
+*.tmp
+*.bak
