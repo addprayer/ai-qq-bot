@@ -255,6 +255,38 @@ def test_env_example_has_no_empty_list_values() -> None:
 
 
 # ---------------------------------------------------------------------------
+# 3.2 版本号一致性
+# ---------------------------------------------------------------------------
+
+
+def test_version_is_semver(settings) -> None:
+    """版本号必须是 x.y.z 形式，并且能在配置摘要里看到。"""
+    import re
+
+    import config
+
+    assert re.fullmatch(r"\d+\.\d+\.\d+", config.VERSION), f"版本号格式不对：{config.VERSION}"
+    assert settings.version == config.VERSION
+    assert f"v{config.VERSION}" in settings.describe()
+
+
+def test_changelog_documents_current_version(settings) -> None:
+    """CHANGELOG.md 里必须有当前版本号的条目（发布时不会漏写）。"""
+    changelog = (PROJECT_ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+    assert f"## [{settings.version}]" in changelog, (
+        f"CHANGELOG.md 中没有 {settings.version} 的条目"
+    )
+
+
+def test_release_notes_file_exists(settings) -> None:
+    """每个版本都要有对应的 Release 说明文件（可用于粘贴到 GitHub）。"""
+    notes = PROJECT_ROOT / "docs" / f"release-notes-v{settings.version}.md"
+    assert notes.is_file(), f"缺少发布说明：{notes.relative_to(PROJECT_ROOT)}"
+    text = notes.read_text(encoding="utf-8")
+    assert settings.version in text
+
+
+# ---------------------------------------------------------------------------
 # 4. 日志脱敏
 # ---------------------------------------------------------------------------
 

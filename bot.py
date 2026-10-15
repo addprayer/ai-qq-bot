@@ -86,7 +86,7 @@ setup_logging(
     async_write=settings.log_async,
 )
 
-logger.info("正在启动 {} ...", settings.bot_name)
+logger.info("正在启动 {} v{} ...", settings.bot_name, settings.version)
 for warning in config_warnings:
     logger.warning("[配置提醒] {}", warning)
 

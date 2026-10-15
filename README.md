@@ -1,8 +1,13 @@
 # AI QQ 群机器人
 
+**当前版本：v1.0.0** ｜ [更新日志](CHANGELOG.md) ｜ [发布说明](docs/release-notes-v1.0.0.md)
+
 一个跑在**你自己的 Windows 电脑**上的 AI QQ 群机器人。
 用 [NapCat](https://github.com/NapNeko/NapCatQQ) 登录 QQ，通过 **OneBot V11 协议**接入
 [NoneBot2](https://nonebot.dev/) 框架，再调用 **DeepSeek API** 生成回复。
+
+> ✅ 已完成**真实 QQ 账号 + NapCat + DeepSeek** 端到端验证：
+> 私聊提问由 AI 回答，耗时 0.7~0.8 秒，上下文记忆与群/用户隔离均正常。
 
 > ⚠️ **NapCat 属于非官方接入方案**，通过修改 QQ 客户端实现，存在**账号被限制或封禁的风险**。
 > 请务必使用**你有权控制的测试小号**，不要用主力账号。相关风险请自行评估。
@@ -39,6 +44,7 @@ QQBot/
 ├── start_bot.bat             # 只启动机器人（支持 --check 自检）
 ├── requirements.txt          # 依赖清单（已锁定版本）
 ├── pytest.ini                # 测试配置
+├── CHANGELOG.md              # 更新日志（每个版本的变化）
 ├── .env.example              # 配置模板（只有占位符，可安全上传）
 ├── .env                      # 你的真实配置（★已被 .gitignore 排除，不会上传）
 ├── .gitignore                # 排除密钥、虚拟环境、日志、数据库等

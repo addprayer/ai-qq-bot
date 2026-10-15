@@ -36,6 +36,10 @@ LOG_DIR: Path = BASE_DIR / "logs"
 #: SQLite 对话历史的默认位置（HISTORY_DB_PATH 留空时使用）
 DEFAULT_HISTORY_DB: Path = BASE_DIR / "data" / "history.db"
 
+#: 项目版本号。发布新版本时同步修改：
+#: 1) 这里  2) CHANGELOG.md  3) 打 git tag（如 v1.0.0）
+VERSION: str = "1.0.0"
+
 
 # ---------------------------------------------------------------------------
 # 异常
@@ -99,6 +103,8 @@ class Settings(BaseSettings):
     )
 
     # ---------------- 机器人基本设置 ----------------
+    #: 项目版本号（可用 .env 里的 VERSION 覆盖，一般不用改）
+    version: str = Field(default=VERSION, description="项目版本号")
     bot_name: str = Field(default="AI助手", description="机器人名字，用于日志与提示语")
     superusers: Annotated[set[str], NoDecode] = Field(
         default_factory=set, description="超级管理员 QQ 号"
@@ -244,6 +250,7 @@ class Settings(BaseSettings):
     def describe(self) -> str:
         """生成一份**可以安全打印**的配置摘要。"""
         return (
+            f"AI QQ Bot v{self.version}\n"
             "当前配置：\n"
             f"  - 机器人名称   : {self.bot_name}\n"
             f"  - 监听地址     : http://{self.host}:{self.port}\n"
@@ -357,6 +364,7 @@ __all__ = [
     "DEFAULT_HISTORY_DB",
     "ENV_FILE",
     "LOG_DIR",
+    "VERSION",
     "ConfigError",
     "Settings",
     "get_settings",
