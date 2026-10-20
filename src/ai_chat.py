@@ -32,6 +32,7 @@ from nonebot.rule import to_me
 
 from config import get_settings
 from src.ai_client import AIClient
+from src.image_input import prepare_images
 from src.web_fetch import FetchResult, build_context, fetch, find_urls
 from src.history import CooldownTracker, HistoryStore, build_history_store
 from src.message_handler import (
@@ -134,16 +135,25 @@ def _at(user_id: str) -> Message:
     return Message(MessageSegment.at(user_id))
 
 
-def _count_images(event: Event) -> int:
-    """数一条消息里带了几张图片/表情包。
+def _image_urls(event: Event) -> list[str]:
+    """取出消息里所有图片/表情包的链接。
 
-    纯表情包消息的纯文本是空的，如果不单独统计，就会被当成「什么都没发」。
+    QQ 的图片段形如 ``{"type": "image", "data": {"url": "http://..."}}``。
+    纯表情包消息的纯文本是空的，只靠文字会把它当成「什么都没发」。
     """
     try:
         message = event.get_message()
     except Exception:  # pragma: no cover - 防御性写法
-        return 0
-    return sum(1 for seg in message if getattr(seg, "type", "") == "image")
+        return []
+    urls: list[str] = []
+    for seg in message:
+        if getattr(seg, "type", "") != "image":
+            continue
+        url = getattr(seg, "data", None) or {}
+        link = str(url.get("url", "") or "").strip()
+        if link:
+            urls.append(link)
+    return urls
 
 
 async def _handle_question(
@@ -153,19 +163,20 @@ async def _handle_question(
     *,
     source: str,
     check_cooldown: bool = True,
-    image_count: int = 0,
+    image_urls: list[str] | None = None,
 ) -> bool:
     """统一的「提问 -> 调 AI -> 回复」流程。
 
     :param check_cooldown: 是否检查冷却时间。
         被 @ 触发的兜底响应器传 ``False``——它是在
         :func:`_handle_mention` 里已经确认过冷却之后才调用的。
-    :param image_count: 本条消息夹带的图片/表情包数量。
-        当前还没接视觉模型，所以只把「发了图」这件事告诉模型，绝不假装看图。
+    :param image_urls: 本条消息里的图片链接（QQ 给的 http 链接）。
+        会本地下载后以 base64 内联给模型，最多 3 张。
 
     :return: 是否已经回复（``True`` 表示已经调用过 ``finish()``）
     """
     group_id, user_id = _session_ids(event)
+    image_urls = image_urls or []
 
     # --- 冷却检查 ---
     # 注意：这里不能用独立的「冷却响应器」，因为 block=True 的响应器
@@ -190,20 +201,22 @@ async def _handle_question(
 
     question = normalize_question(question, _settings.max_question_length)
 
-    # 只有图片/表情包、没有文字：不再甩「AI 助手使用说明」那段话。
-    # 当前还没接视觉模型，所以用一句人话说过去，绝不假装看图。
-    if not question:
-        if image_count > 0:
-            await matcher.finish(
-                _at(user_id)
-                + MessageSegment.text(" 嗯，图我这边显示不出来。你说说它是什么意思？")
-            )
-        else:
-            await matcher.finish(_at(user_id) + MessageSegment.text(" ？你想说什么，我没听清。"))
+    # 既没文字也没图片：不甩「AI 助手使用说明」，只回一句人话
+    if not question and not image_urls:
+        await matcher.finish(_at(user_id) + MessageSegment.text(" ？你想说什么，我没听清。"))
         return True
 
-    log_request(group_id, user_id, source=source, question=question)
+    # 只有图片：给模型一句占位说明，让它知道「对方只发了图」
+    if not question and image_urls:
+        question = "（对方只发来了图片，没有配文字）"
+
+    log_request(group_id, user_id, source=source, question=question or "（图片）")
     _cooldown.touch(group_id, user_id)
+
+    # --- 图片/表情包：下载并内联，随本轮消息一起发给模型 ---
+    prepared = await prepare_images(image_urls) if image_urls else []
+    if image_urls and not prepared:
+        logger.warning("本轮的 {} 张图片全部准备失败，改为纯文字回答", len(image_urls))
 
     # --- 联网：消息里带链接就抓网页正文，作为【参考网页】喂给模型 ---
     prompt = question
@@ -219,8 +232,9 @@ async def _handle_question(
     started = time.monotonic()
     history = _history.get_messages(group_id, user_id)
     try:
-        # prompt = 原问题（含链接时再追加【参考网页】），history 只存原始对话
-        result = await _ai_client.chat(prompt, history)
+        # prompt = 原问题（含链接时再追加【参考网页】），history 只存原始对话；
+        # images 只在当轮发送，避免历史每轮重复计图片 token
+        result = await _ai_client.chat(prompt, history, images=[p.source for p in prepared])
     except Exception as exc:  # noqa: BLE001 - 兜底，任何异常都不该让机器人挂掉
         logger.exception("AI 调用出现未预期异常：{}", type(exc).__name__)
         await matcher.finish(_at(user_id) + MessageSegment.text(" 机器人内部出错了，请稍后再试。"))
@@ -234,7 +248,7 @@ async def _handle_question(
         return True
 
     answer = truncate_reply(result.text, _settings.max_reply_length)
-    _history.append_turn(group_id, user_id, question, answer)
+    _history.append_turn(group_id, user_id, question or "（图片）", answer)
     log_request(group_id, user_id, source=source, question=question, ok=True, elapsed=elapsed)
 
     await matcher.finish(_at(user_id) + MessageSegment.text(f" {answer}"))
@@ -291,13 +305,13 @@ async def _handle_clear(event: Event, matcher: Matcher) -> None:
 async def _handle_ai_command(event: Event, matcher: Matcher) -> None:
     question = split_ai_command(_plain_text(event))
     # on_command 已经确认了命令名，这里正常情况下不会是 None
-    await _handle_question(event, matcher, question or "", source="指令", image_count=_count_images(event))
+    await _handle_question(event, matcher, question or "", source="指令", image_urls=_image_urls(event))
 
 
 @matcher_ai_loose.handle()
 async def _handle_ai_command_loose(event: Event, matcher: Matcher) -> None:
     question = split_ai_command(_plain_text(event)) or ""
-    await _handle_question(event, matcher, question, source="指令", image_count=_count_images(event))
+    await _handle_question(event, matcher, question, source="指令", image_urls=_image_urls(event))
 
 
 # ---------------------------------------------------------------------------
@@ -333,7 +347,7 @@ async def _handle_mention(bot: Bot, event: Event, matcher: Matcher) -> None:
         question,
         source="@提问",
         check_cooldown=False,
-        image_count=_count_images(event),
+        image_urls=_image_urls(event),
     )
 
 

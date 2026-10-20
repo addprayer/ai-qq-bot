@@ -208,12 +208,16 @@ class AIClient:
         self,
         question: str,
         history: Sequence[Mapping[str, str]] = (),
+        images: Sequence[str] = (),
     ) -> AIResult:
         """带历史上下文地问一个问题。
 
         :param question: 用户本次提问（已做长度校验）
         :param history: 之前的对话，形如
             ``[{"role": "user", "content": "..."}, {"role": "assistant", "content": "..."}]``
+        :param images: 本次消息里的图片，元素是 data URL 或 http 链接。
+            有图片时会把用户消息构造成 OpenAI 的 content 数组
+            （``text`` + ``image_url`` 块），否则沿用纯字符串。
         """
         if self._client is None:
             return AIResult(
@@ -223,10 +227,14 @@ class AIClient:
             )
 
         question = (question or "").strip()
-        if not question:
+        # 只有图片没有文字时，用一句占位提示，让模型知道"对方只发了图"
+        images = [img for img in (images or ()) if img]
+        if not question and not images:
             return AIResult(ok=False, text="你想问什么呢？", error_kind="empty_question")
+        if not question:
+            question = "（对方只发来了图片，没有配文字）"
 
-        messages = self._build_messages(question, history)
+        messages = self._build_messages(question, history, images)
 
         try:
             response = await self._client.chat.completions.create(
@@ -262,14 +270,35 @@ class AIClient:
         self,
         question: str,
         history: Iterable[Mapping[str, str]],
-    ) -> list[dict[str, str]]:
-        messages: list[dict[str, str]] = [{"role": "system", "content": self.system_prompt}]
+        images: Sequence[str] = (),
+    ) -> list[dict[str, Any]]:
+        """组装 messages。
+
+        历史对话一律用纯字符串（图片只在当轮发送，避免每轮都重复计费）。
+        当轮有图片时，把 content 换成 OpenAI 的数组形式：
+
+        ``[{"type": "text", ...}, {"type": "image_url", "image_url": {"url": ...}}]``
+        """
+        messages: list[dict[str, Any]] = [{"role": "system", "content": self.system_prompt}]
         for item in history:
             role = item.get("role")
             content = item.get("content")
             if role in {"user", "assistant"} and isinstance(content, str) and content:
                 messages.append({"role": role, "content": content})
-        messages.append({"role": "user", "content": question})
+
+        if images:
+            blocks: list[dict[str, Any]] = [{"type": "text", "text": question}]
+            for source in images:
+                blocks.append(
+                    {
+                        "type": "image_url",
+                        # detail=low 会先缩到 512×512，表情包这类图足够用且更便宜
+                        "image_url": {"url": source, "detail": "low"},
+                    }
+                )
+            messages.append({"role": "user", "content": blocks})
+        else:
+            messages.append({"role": "user", "content": question})
         return messages
 
     @staticmethod

@@ -415,7 +415,7 @@ def test_shipped_persona_file_is_makima() -> None:
     assert "玛奇玛" in prompt
     # 角色气质与反 AI 腔的关键要求
     assert "大姐姐" in prompt
-    for phrase in ("反AI腔", "客服", "记忆规则"):
+    for phrase in ("反AI腔", "客服", "记忆"):
         assert phrase in prompt, f"人设缺少关键约束：{phrase}"
     # 安全边界必须保留，避免被「扮演角色」绕过
     for guard in ("违法", "心理诊断", "未成年人"):

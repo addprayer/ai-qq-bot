@@ -287,46 +287,129 @@ async def test_empty_message_never_prints_help_menu(harness) -> None:
     assert joined.strip(), "至少要给一句回应，不能完全沉默"
 
 
-async def test_image_only_message_does_not_print_help_menu(harness) -> None:
-    """发纯表情包/图片时，不能被当成「什么都没说」而触发帮助文案。
+def _stub_prepare(monkeypatch):
+    """把图片准备替换成固定结果，避免测试里真的去下载。"""
+    from src.image_input import PreparedImage
 
-    当前版本还没接视觉模型，所以回复里会说明看不到图，
-    但重点是：不能出现指令菜单，也不能把空字符串丢给 AI。
+    async def fake_prepare(urls, limit=3):
+        return [PreparedImage(source="data:image/png;base64,AAA", mime="image/png", size=3, inlined=True)] if urls else []
+
+    monkeypatch.setattr("src.ai_chat.prepare_images", fake_prepare)
+
+
+async def test_image_only_message_goes_to_ai_with_image(harness, monkeypatch) -> None:
+    _stub_prepare(monkeypatch)
+    """只发一张表情包：不能被当成「什么都没说」，也不能弹帮助菜单。
+
+    现在会把图片一起发给模型（下载失败时降级为传链接），
+    本轮问答也不能是空字符串。
     """
+    from nonebot.adapters.onebot.v11 import GroupMessageEvent
+
     event_dict = harness.make_group_event("", user_id=10001, group_id=555, at_me=True)
     event_dict["message"] = [
         {"type": "at", "data": {"qq": SELF_ID}},
         {"type": "image", "data": {"file": "abc.jpg", "url": "http://example.com/a.jpg", "summary": "[动画表情]"}},
     ]
-    from nonebot.adapters.onebot.v11 import GroupMessageEvent
-
     event = GroupMessageEvent.model_validate(event_dict)
     before = len(harness.api_calls)
     await harness.bot.handle_event(event)
-    texts = extract_texts(harness.api_calls[before:])
-    joined = "".join(texts)
+    joined = "".join(extract_texts(harness.api_calls[before:]))
 
     assert "你想问点什么呢" not in joined
     assert "/帮助" not in joined
-    assert "显示不出来" in joined or "图" in joined
-    # 没有文字时不该硬调 AI（避免花冤枉钱）
-    assert harness.ai.calls == []
+    assert harness.ai.calls, "有图就应该交给模型看"
+    question, _history, images = harness.ai.calls[-1]
+    assert question.strip(), "不能把空字符串丢给模型"
+    assert images, "图片应该被带进请求"
 
 
-async def test_text_plus_image_still_asks_ai(harness) -> None:
-    """「图 + 一句话」的组合应该照常提问，图片数量要传给处理流程。"""
+async def test_text_plus_image_sends_both(harness, monkeypatch) -> None:
+    _stub_prepare(monkeypatch)
+    """「图 + 一句话」：文字照常处理，图片一起发过去。"""
+    from nonebot.adapters.onebot.v11 import GroupMessageEvent
+
     event_dict = harness.make_group_event("这张图什么意思", user_id=10001, group_id=555, at_me=True)
     event_dict["message"] = [
         {"type": "at", "data": {"qq": SELF_ID}},
         {"type": "text", "data": {"text": " 这张图什么意思"}},
         {"type": "image", "data": {"file": "x.jpg", "url": "http://example.com/x.jpg"}},
     ]
-    from nonebot.adapters.onebot.v11 import GroupMessageEvent
-
     event = GroupMessageEvent.model_validate(event_dict)
     await harness.bot.handle_event(event)
     assert harness.ai.calls, "带文字时应该正常调用 AI"
-    assert "这张图什么意思" in harness.ai.calls[-1][0]
+    question, _history, images = harness.ai.calls[-1]
+    assert "这张图什么意思" in question
+    assert len(images) == 1
+
+
+def test_image_urls_extracts_links() -> None:
+    """_image_urls 要把消息里的图片链接都取出来，忽略文字段。"""
+    from nonebot.adapters.onebot.v11 import GroupMessageEvent
+
+    from src.ai_chat import _image_urls
+    import time
+
+    event = GroupMessageEvent.model_validate(
+        {
+            "post_type": "message",
+            "message_type": "group",
+            "sub_type": "normal",
+            "message_id": 1,
+            "group_id": 1,
+            "user_id": 2,
+            "time": int(time.time()),
+            "self_id": int(SELF_ID),
+            "raw_message": "hi",
+            "font": 0,
+            "sender": {"user_id": 2, "nickname": "x"},
+            "message": [
+                {"type": "text", "data": {"text": "hi"}},
+                {"type": "image", "data": {"url": "http://a/1.png"}},
+                {"type": "image", "data": {"url": "http://a/2.gif"}},
+                {"type": "image", "data": {}},  # 没有 url 的跳过
+            ],
+        }
+    )
+    assert _image_urls(event) == ["http://a/1.png", "http://a/2.gif"]
+
+
+def test_build_messages_with_images_uses_content_blocks() -> None:
+    """有图片时，用户消息必须构造成 text + image_url 的数组形式。"""
+    from src.ai_client import AIClient
+
+    client = AIClient(
+        api_key="sk-example-0000000000000000000000",
+        base_url="https://api.deepseek.com",
+        model="deepseek-chat",
+        system_prompt="sys",
+    )
+    messages = client._build_messages(  # noqa: SLF001
+        "看图", [{"role": "user", "content": "上一轮"}], ["data:image/png;base64,AAA"]
+    )
+    user_msg = messages[-1]
+    assert isinstance(user_msg["content"], list)
+    assert user_msg["content"][0] == {"type": "text", "text": "看图"}
+    assert user_msg["content"][1]["type"] == "image_url"
+    assert user_msg["content"][1]["image_url"]["url"] == "data:image/png;base64,AAA"
+
+    # 没有图片时仍然是纯字符串（保持旧行为，省 token）
+    plain = client._build_messages("看图", [])  # noqa: SLF001
+    assert plain[-1]["content"] == "看图"
+
+
+def test_build_messages_placeholder_when_image_only() -> None:
+    """只有图片时，chat() 要自动补一句占位说明，不能发空文本。"""
+    from src.ai_client import AIClient
+
+    client = AIClient(
+        api_key="sk-example-0000000000000000000000",
+        base_url="https://api.deepseek.com",
+        model="deepseek-chat",
+        system_prompt="sys",
+    )
+    messages = client._build_messages("（对方只发来了图片，没有配文字）", [], ["data:image/png;base64,AAA"])  # noqa: SLF001
+    assert "图片" in messages[-1]["content"][0]["text"]
 
 
 # ---------------------------------------------------------------------------

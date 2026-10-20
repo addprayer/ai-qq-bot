@@ -124,15 +124,21 @@ def fake_ai():
             from src.ai_client import AIResult
 
             self._result_cls = AIResult
-            self.calls: list[tuple[str, list]] = []
+            # 每次调用记录 (问题, 历史, 图片)，图片元素是 data URL 或链接
+            self.calls: list[tuple[str, list, list]] = []
             self.next_reply = "这是测试回复"
             self.next_ok = True
 
-        async def chat(self, question, history=()):  # noqa: ANN001, ANN201
-            self.calls.append((question, list(history)))
+        async def chat(self, question, history=(), images=()):  # noqa: ANN001, ANN201
+            self.calls.append((question, list(history), list(images)))
             if self.next_ok:
                 return self._result_cls(ok=True, text=self.next_reply, usage={"total_tokens": 1})
             return self._result_cls(ok=False, text="模拟失败", error_kind="unknown_error")
+
+        @property
+        def last_images(self) -> list:
+            """最近一次调用带的图片。"""
+            return self.calls[-1][2] if self.calls else []
 
     return FakeAIClient()
 
