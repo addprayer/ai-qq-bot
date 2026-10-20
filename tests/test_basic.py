@@ -399,49 +399,94 @@ def test_no_secret_in_source_files() -> None:
 
 
 # ---------------------------------------------------------------------------
-# 5. 人设（默认：电锯人的玛奇玛）
+# 5. 人设（默认：personas/makima.txt）
 # ---------------------------------------------------------------------------
 
 
-def test_default_persona_is_makima() -> None:
-    """默认人设必须是玛奇玛，且保留关键特征与安全边界。"""
+def test_shipped_persona_file_is_makima() -> None:
+    """仓库自带的人设文件必须存在，且保留角色内核与安全边界。"""
     import config
 
-    prompt = config.DEFAULT_SYSTEM_PROMPT
+    assert config.DEFAULT_PERSONA_FILE.is_file(), (
+        f"缺少人设文件：{config.DEFAULT_PERSONA_FILE}"
+    )
+    prompt = config.DEFAULT_PERSONA_FILE.read_text(encoding="utf-8")
+
     assert "玛奇玛" in prompt
-    assert "电锯人" in prompt
-    # 说话方式的关键特征
-    for trait in ("呢", "吧", "哦"):
-        assert trait in prompt
-    assert "好孩子" in prompt
-    # 必须保留安全边界，避免被「扮演角色」绕过
-    assert "违法" in prompt
-    assert "婉拒" in prompt
+    # 角色气质与反 AI 腔的关键要求
+    assert "大姐姐" in prompt
+    for phrase in ("反AI腔", "客服", "记忆规则"):
+        assert phrase in prompt, f"人设缺少关键约束：{phrase}"
+    # 安全边界必须保留，避免被「扮演角色」绕过
+    for guard in ("违法", "心理诊断", "未成年人"):
+        assert guard in prompt, f"人设缺少安全边界：{guard}"
+    # 必须明确「被问是不是 AI 时不许骗人」
+    assert "不要欺骗" in prompt
+
+
+def test_resolve_system_prompt_prefers_inline(monkeypatch) -> None:
+    """内联提示词优先级最高，用来临时覆盖人设文件。"""
+    import config
+
+    monkeypatch.setenv("AI_SYSTEM_PROMPT", "内联人设ABC")
+    fresh = config.Settings()
+    assert fresh.resolve_system_prompt() == "内联人设ABC"
+
+
+def test_resolve_system_prompt_falls_back_when_file_missing(monkeypatch, work_dir) -> None:
+    """人设文件不存在时不能崩溃，要回落到内置兜底人设。"""
+    import config
+
+    monkeypatch.setenv("AI_SYSTEM_PROMPT", "")
+    monkeypatch.setenv("AI_SYSTEM_PROMPT_FILE", str(work_dir / "不存在的人设.txt"))
+    fresh = config.Settings()
+    assert fresh.resolve_system_prompt() == config.DEFAULT_SYSTEM_PROMPT
+
+
+def test_resolve_system_prompt_ignores_empty_file(monkeypatch, work_dir) -> None:
+    """人设文件是空白时也要回落，不能把空提示词发给模型。"""
+    import config
+
+    blank = work_dir / "blank.txt"
+    blank.write_text("   \n\n  ", encoding="utf-8")
+    monkeypatch.setenv("AI_SYSTEM_PROMPT", "")
+    monkeypatch.setenv("AI_SYSTEM_PROMPT_FILE", str(blank))
+    fresh = config.Settings()
+    assert fresh.resolve_system_prompt().strip() == config.DEFAULT_SYSTEM_PROMPT
 
 
 def test_default_bot_name_matches_persona(monkeypatch) -> None:
-    """默认机器人名字要与默认人设一致（不要出现「AI助手」配玛奇玛这种错位）。
-
-    注意：测试环境（conftest.py）会设置 BOT_NAME / AI_SYSTEM_PROMPT，
-    这里必须先把它们清掉，否则测的是测试环境的值而不是「默认值」。
-    """
+    """默认机器人名字要与默认人设一致（不要出现「AI助手」配玛奇玛这种错位）。"""
     import config
 
     monkeypatch.delenv("BOT_NAME", raising=False)
     monkeypatch.delenv("AI_SYSTEM_PROMPT", raising=False)
     fresh = config.Settings()
     assert fresh.bot_name == "玛奇玛", f"默认名字应为玛奇玛，实际 {fresh.bot_name!r}"
-    assert fresh.ai_system_prompt == config.DEFAULT_SYSTEM_PROMPT
-    assert "玛奇玛" in fresh.ai_system_prompt
+    assert "玛奇玛" in fresh.resolve_system_prompt()
 
 
-def test_env_example_has_default_persona() -> None:
-    """.env.example 里也要带默认人设，否则新用户拿到的还是旧提示词。"""
+def test_env_example_points_to_persona_file() -> None:
+    """.env.example 要用「人设文件」方式，并且默认内联提示词留空。"""
     text = (PROJECT_ROOT / ".env.example").read_text(encoding="utf-8")
-    line = next((ln for ln in text.splitlines() if ln.startswith("AI_SYSTEM_PROMPT=")), "")
-    assert "玛奇玛" in line, ".env.example 的 AI_SYSTEM_PROMPT 没有更新为玛奇玛"
-    name_line = next((ln for ln in text.splitlines() if ln.startswith("BOT_NAME=")), "")
-    assert "玛奇玛" in name_line
+    lines = {ln.split("=", 1)[0]: ln.split("=", 1)[1] for ln in text.splitlines() if "=" in ln and not ln.strip().startswith("#")}
+
+    assert lines.get("AI_SYSTEM_PROMPT", "x").strip() == "", (
+        ".env.example 的 AI_SYSTEM_PROMPT 应留空（改用文件），否则会覆盖人设文件"
+    )
+    assert "personas/makima.txt" in lines.get("AI_SYSTEM_PROMPT_FILE", ""), (
+        ".env.example 没有指向 personas/makima.txt"
+    )
+    assert "玛奇玛" in lines.get("BOT_NAME", "")
+
+
+def test_system_prompt_not_leaked_in_describe(settings) -> None:
+    """配置摘要里不应该把完整人设打印出来（很长，且属于内部设定）。"""
+    prompt = settings.resolve_system_prompt()
+    described = settings.describe()
+    # 允许摘要里出现角色名，但不能整段输出提示词
+    assert prompt[:60] not in described
+    assert len(described) < 800
 
 
 # ---------------------------------------------------------------------------

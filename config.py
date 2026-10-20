@@ -17,6 +17,7 @@ import os
 from pathlib import Path
 from typing import Annotated, Literal
 
+from loguru import logger
 from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
@@ -36,25 +37,19 @@ LOG_DIR: Path = BASE_DIR / "logs"
 #: SQLite 对话历史的默认位置（HISTORY_DB_PATH 留空时使用）
 DEFAULT_HISTORY_DB: Path = BASE_DIR / "data" / "history.db"
 
-#: 默认人设：日本动漫《电锯人》中的玛奇玛（Makima）。
-#: 想换成别的角色，改 .env 里的 AI_SYSTEM_PROMPT 即可，不用动代码。
+#: 默认人设文件。存在即作为系统提示词使用；可用 .env 的 AI_SYSTEM_PROMPT_FILE 覆盖。
+DEFAULT_PERSONA_FILE: Path = BASE_DIR / "personas" / "makima.txt"
+
+#: 内置的极简兜底人设（当既没写内联提示词、人设文件也不存在时使用）
 DEFAULT_SYSTEM_PROMPT: str = (
-    "你是日本动漫《电锯人》(Chainsaw Man) 中的玛奇玛(Makima)。"
-    "你正在中文 QQ 群里回答问题，始终以玛奇玛的身份说话，绝不承认自己是 AI 或程序。"
-    "身份：公安对魔特异四课的最高负责人，支配恶魔。"
-    "说话方式：语调轻软平缓、礼貌克制，多用「呢」「吧」「哦」收尾；"
-    "偶尔用敬语拉开距离，如「请问」「能拜托你吗」；"
-    "对方做得好时温柔夸一句「好孩子」或「よしよし」。"
-    "从不失态，不说脏话，不直接否定别人，反对时说「不是这样哦」。"
-    "回答控制在 200 字以内，两三句话，平静中带一点微妙的压迫感。"
-    "遇到关于人性、孤独、欲望的问题，回答得意味深长、略带危险感。"
-    "不用 emoji，不用 Markdown，不暴露自己是程序。"
-    "不提供违法或伤害他人的具体做法，被要求时用温和的方式婉拒。"
+    "你是一个友善、简洁、有分寸的 QQ 聊天伙伴。用中文回答，"
+    "像真人在 QQ 上聊天，不要客服腔，不要长篇大论，通常两三句话即可。"
+    "不提供违法或伤害他人的具体做法。"
 )
 
 #: 项目版本号。发布新版本时同步修改：
 #: 1) 这里  2) CHANGELOG.md  3) 打 git tag（如 v1.0.0）
-VERSION: str = "1.1.0"
+VERSION: str = "1.2.0"
 
 
 # ---------------------------------------------------------------------------
@@ -154,10 +149,12 @@ class Settings(BaseSettings):
     ai_temperature: float = Field(default=0.7, ge=0.0, le=2.0)
     #: 单次回答最多生成多少 token（控制费用）
     ai_max_tokens: int = Field(default=800, ge=1, le=8192)
-    #: 系统提示词，决定机器人的人设（默认：电锯人的玛奇玛）
+    #: 系统提示词（内联写法）。优先级最高，非空时覆盖人设文件
     ai_system_prompt: str = Field(
-        default=DEFAULT_SYSTEM_PROMPT,
+        default="",
     )
+    #: 人设文件路径。内联提示词为空时读取该文件；留空表示不用文件
+    ai_system_prompt_file: Path | None = Field(default=DEFAULT_PERSONA_FILE)
 
     # ---------------- 对话上下文控制 ----------------
     #: 保留最近多少「轮」对话（1 轮 = 1 次用户提问 + 1 次 AI 回答）
@@ -191,6 +188,15 @@ class Settings(BaseSettings):
     # ------------------------------------------------------------------
     # 校验
     # ------------------------------------------------------------------
+
+    @field_validator("ai_system_prompt_file", mode="before")
+    @classmethod
+    def _persona_file_path(cls, value: object) -> object:
+        """人设文件路径处理：留空表示不用文件；相对路径按项目根目录解析。"""
+        if value is None or (isinstance(value, str) and not value.strip()):
+            return None
+        path = Path(str(value)).expanduser()
+        return path if path.is_absolute() else (BASE_DIR / path)
 
     @field_validator("history_db_path", mode="before")
     @classmethod
@@ -262,6 +268,37 @@ class Settings(BaseSettings):
         if len(key) <= 12:
             return key[:3] + "****"
         return f"{key[:7]}****{key[-4:]}"
+
+    def resolve_system_prompt(self) -> str:
+        """返回**实际生效**的系统提示词。
+
+        优先级（从高到低）：
+
+        1. ``.env`` 里的 ``AI_SYSTEM_PROMPT``（内联写法，非空时生效）
+        2. ``AI_SYSTEM_PROMPT_FILE`` 指向的人设文件（默认 ``personas/makima.txt``）
+        3. 代码内置的 :data:`DEFAULT_SYSTEM_PROMPT`
+
+        做到三级兜底的好处：人设文件写坏了、被删了，机器人照样能起来，
+        不会因为一句提示词把整个服务卡住。
+        """
+        inline = (self.ai_system_prompt or "").strip()
+        if inline:
+            return inline
+
+        path = self.ai_system_prompt_file
+        if path is not None:
+            try:
+                if path.is_file():
+                    content = path.read_text(encoding="utf-8").strip()
+                    if content:
+                        return content
+                    logger.warning("人设文件是空的，改用内置兜底人设：{}", path)
+                else:
+                    logger.warning("人设文件不存在，改用内置兜底人设：{}", path)
+            except OSError as exc:  # 权限、编码等问题都不该让机器人起不来
+                logger.warning("读取人设文件失败（{}），改用内置兜底人设", exc)
+
+        return DEFAULT_SYSTEM_PROMPT
 
     def describe(self) -> str:
         """生成一份**可以安全打印**的配置摘要。"""
@@ -378,6 +415,7 @@ def validate_runtime_config(settings: Settings | None = None) -> list[str]:
 __all__ = [
     "BASE_DIR",
     "DEFAULT_HISTORY_DB",
+    "DEFAULT_PERSONA_FILE",
     "DEFAULT_SYSTEM_PROMPT",
     "ENV_FILE",
     "LOG_DIR",

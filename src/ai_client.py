@@ -180,11 +180,17 @@ class AIClient:
     @classmethod
     def from_settings(cls, settings: Any) -> "AIClient":
         """从 :class:`config.Settings` 构建。"""
+        # 人设可能是 .env 里的内联字符串，也可能来自 personas/*.txt 文件，
+        # 统一交给 Settings.resolve_system_prompt() 决定（内联 > 文件 > 内置默认）
+        if hasattr(settings, "resolve_system_prompt"):
+            system_prompt = settings.resolve_system_prompt()
+        else:  # 兼容只提供 ai_system_prompt 的简单配置对象
+            system_prompt = getattr(settings, "ai_system_prompt", "")
         return cls(
             api_key=settings.ai_api_key.get_secret_value().strip(),
             base_url=settings.ai_base_url,
             model=settings.ai_model,
-            system_prompt=settings.ai_system_prompt,
+            system_prompt=system_prompt,
             timeout=settings.ai_timeout,
             max_retries=settings.ai_max_retries,
             temperature=settings.ai_temperature,
