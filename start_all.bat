@@ -2,16 +2,32 @@
 REM ===========================================================================
 REM  AI QQ Bot - full startup (NapCat + Bot)
 REM
-REM  This is the file you double-click every day.
+REM  Double-click this file every day.
 REM  Edit NAPCAT_DIR below if you installed NapCat somewhere else.
 REM ===========================================================================
 setlocal EnableDelayedExpansion
 chcp 65001 >nul
 cd /d "%~dp0"
 
+REM --- NapCat has to run as administrator (it injects into the QQ process), ---
+REM --- so re-launch this script elevated when we are not administrator yet. ---
+if /i "%~1"=="--elevated" goto :admin_ok
+REM Check for a High Integrity token (SID S-1-16-12288). Locale independent,
+REM and unlike fltmc / net session it does not depend on extra services.
+whoami /groups 2>nul | find "S-1-16-12288" >nul 2>&1
+if errorlevel 1 (
+    echo Requesting administrator privileges ...
+    powershell -NoProfile -Command "Start-Process -FilePath '%~f0' -ArgumentList '--elevated' -Verb RunAs"
+    exit /b
+)
+:admin_ok
+echo Administrator mode detected.
+echo.
+
 set "NAPCAT_DIR=C:\napcat\NapCat.52230.Shell"
-REM 用「快速登录」脚本启动：带 QQ 号复用本地会话，避免每次都扫码。
-REM 若哪天想手动扫码登录，把它临时改回 napcat.bat 即可。
+REM Use the quick-login launcher: pass the QQ number so the saved local
+REM session is reused and the QR code is normally not needed.
+REM Change back to napcat.bat if you ever want to scan manually.
 set "NAPCAT_BAT=napcat.quick.bat"
 set "NAPCAT_PORT=6099"
 
@@ -48,8 +64,7 @@ if "!PORT_OPEN!"=="1" (
     goto :run_bot
 )
 
-echo Starting NapCat in a new administrator window ...
-echo   A UAC prompt may appear. Click "Yes" to allow it.
+echo Starting NapCat in a new window ...
 echo.
 REM NOTE: use "start /d <dir>" so that no quote-escaping is needed.
 REM Escaping quotes around a path containing spaces breaks the command
@@ -62,8 +77,8 @@ echo Waiting for NapCat to be ready (up to 90 seconds) ...
 if errorlevel 1 (
     echo.
     echo [WARN] NapCat did not open port %NAPCAT_PORT% in time.
-    echo        Check the "NapCat" window: you may need to scan the QR code to log in.
-    echo        Continuing anyway - the bot reconnects automatically once NapCat is up.
+    echo        Check the "NapCat" window: it may need a QR scan.
+    echo        Continuing anyway - the bot reconnects automatically.
     echo.
 ) else (
     echo [OK] NapCat is running.
