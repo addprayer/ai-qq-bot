@@ -67,6 +67,10 @@ Thumbs.db
 Desktop.ini
 $RECYCLE.BIN/
 
+# --- 快捷方式（NapCat WebUI 或用户自己拖出来的，不属于源码）---
+*.url
+*.lnk
+
 # --- 临时文件 ---
 .tmp/
 tmp/

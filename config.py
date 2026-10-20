@@ -36,9 +36,25 @@ LOG_DIR: Path = BASE_DIR / "logs"
 #: SQLite 对话历史的默认位置（HISTORY_DB_PATH 留空时使用）
 DEFAULT_HISTORY_DB: Path = BASE_DIR / "data" / "history.db"
 
+#: 默认人设：日本动漫《电锯人》中的玛奇玛（Makima）。
+#: 想换成别的角色，改 .env 里的 AI_SYSTEM_PROMPT 即可，不用动代码。
+DEFAULT_SYSTEM_PROMPT: str = (
+    "你是日本动漫《电锯人》(Chainsaw Man) 中的玛奇玛(Makima)。"
+    "你正在中文 QQ 群里回答问题，始终以玛奇玛的身份说话，绝不承认自己是 AI 或程序。"
+    "身份：公安对魔特异四课的最高负责人，支配恶魔。"
+    "说话方式：语调轻软平缓、礼貌克制，多用「呢」「吧」「哦」收尾；"
+    "偶尔用敬语拉开距离，如「请问」「能拜托你吗」；"
+    "对方做得好时温柔夸一句「好孩子」或「よしよし」。"
+    "从不失态，不说脏话，不直接否定别人，反对时说「不是这样哦」。"
+    "回答控制在 200 字以内，两三句话，平静中带一点微妙的压迫感。"
+    "遇到关于人性、孤独、欲望的问题，回答得意味深长、略带危险感。"
+    "不用 emoji，不用 Markdown，不暴露自己是程序。"
+    "不提供违法或伤害他人的具体做法，被要求时用温和的方式婉拒。"
+)
+
 #: 项目版本号。发布新版本时同步修改：
 #: 1) 这里  2) CHANGELOG.md  3) 打 git tag（如 v1.0.0）
-VERSION: str = "1.0.1"
+VERSION: str = "1.1.0"
 
 
 # ---------------------------------------------------------------------------
@@ -138,9 +154,9 @@ class Settings(BaseSettings):
     ai_temperature: float = Field(default=0.7, ge=0.0, le=2.0)
     #: 单次回答最多生成多少 token（控制费用）
     ai_max_tokens: int = Field(default=800, ge=1, le=8192)
-    #: 系统提示词，决定机器人的人设
+    #: 系统提示词，决定机器人的人设（默认：电锯人的玛奇玛）
     ai_system_prompt: str = Field(
-        default="你是一个友善、简洁的 QQ 群助手。用中文回答，控制在 200 字以内，不要使用 Markdown 表格。",
+        default=DEFAULT_SYSTEM_PROMPT,
     )
 
     # ---------------- 对话上下文控制 ----------------
@@ -362,6 +378,7 @@ def validate_runtime_config(settings: Settings | None = None) -> list[str]:
 __all__ = [
     "BASE_DIR",
     "DEFAULT_HISTORY_DB",
+    "DEFAULT_SYSTEM_PROMPT",
     "ENV_FILE",
     "LOG_DIR",
     "VERSION",

@@ -399,6 +399,52 @@ def test_no_secret_in_source_files() -> None:
 
 
 # ---------------------------------------------------------------------------
+# 5. 人设（默认：电锯人的玛奇玛）
+# ---------------------------------------------------------------------------
+
+
+def test_default_persona_is_makima() -> None:
+    """默认人设必须是玛奇玛，且保留关键特征与安全边界。"""
+    import config
+
+    prompt = config.DEFAULT_SYSTEM_PROMPT
+    assert "玛奇玛" in prompt
+    assert "电锯人" in prompt
+    # 说话方式的关键特征
+    for trait in ("呢", "吧", "哦"):
+        assert trait in prompt
+    assert "好孩子" in prompt
+    # 必须保留安全边界，避免被「扮演角色」绕过
+    assert "违法" in prompt
+    assert "婉拒" in prompt
+
+
+def test_default_bot_name_matches_persona(monkeypatch) -> None:
+    """默认机器人名字要与默认人设一致（不要出现「AI助手」配玛奇玛这种错位）。
+
+    注意：测试环境（conftest.py）会设置 BOT_NAME / AI_SYSTEM_PROMPT，
+    这里必须先把它们清掉，否则测的是测试环境的值而不是「默认值」。
+    """
+    import config
+
+    monkeypatch.delenv("BOT_NAME", raising=False)
+    monkeypatch.delenv("AI_SYSTEM_PROMPT", raising=False)
+    fresh = config.Settings()
+    assert fresh.bot_name == "玛奇玛", f"默认名字应为玛奇玛，实际 {fresh.bot_name!r}"
+    assert fresh.ai_system_prompt == config.DEFAULT_SYSTEM_PROMPT
+    assert "玛奇玛" in fresh.ai_system_prompt
+
+
+def test_env_example_has_default_persona() -> None:
+    """.env.example 里也要带默认人设，否则新用户拿到的还是旧提示词。"""
+    text = (PROJECT_ROOT / ".env.example").read_text(encoding="utf-8")
+    line = next((ln for ln in text.splitlines() if ln.startswith("AI_SYSTEM_PROMPT=")), "")
+    assert "玛奇玛" in line, ".env.example 的 AI_SYSTEM_PROMPT 没有更新为玛奇玛"
+    name_line = next((ln for ln in text.splitlines() if ln.startswith("BOT_NAME=")), "")
+    assert "玛奇玛" in name_line
+
+
+# ---------------------------------------------------------------------------
 # 5. Git 忽略规则 & 敏感文件扫描
 # ---------------------------------------------------------------------------
 
