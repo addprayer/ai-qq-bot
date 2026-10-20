@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import pytest
 
-from tests.harness import SELF_ID, extract_ats
+from tests.harness import SELF_ID, extract_ats, extract_texts
 
 
 def _http_client_module():
@@ -276,10 +276,57 @@ async def test_ai_command_without_space(harness) -> None:
     assert harness.ai.calls[-1][0] == "帮我写个函数"
 
 
-async def test_at_me_without_question_asks_back(harness) -> None:
+async def test_empty_message_never_prints_help_menu(harness) -> None:
+    """空消息可以回一句人话，但绝不能甩出「AI 助手使用说明」那套菜单。"""
     result = await harness.send_group_message("", user_id=10001, group_id=555, at_me=True)
     assert harness.ai.calls == []
-    assert any("你想问点什么呢" in text for text in result["texts"])
+    joined = "".join(result["texts"])
+    assert "你想问点什么呢" not in joined
+    assert "@我 后面直接跟问题" not in joined
+    assert "/帮助 查看完整说明" not in joined
+    assert joined.strip(), "至少要给一句回应，不能完全沉默"
+
+
+async def test_image_only_message_does_not_print_help_menu(harness) -> None:
+    """发纯表情包/图片时，不能被当成「什么都没说」而触发帮助文案。
+
+    当前版本还没接视觉模型，所以回复里会说明看不到图，
+    但重点是：不能出现指令菜单，也不能把空字符串丢给 AI。
+    """
+    event_dict = harness.make_group_event("", user_id=10001, group_id=555, at_me=True)
+    event_dict["message"] = [
+        {"type": "at", "data": {"qq": SELF_ID}},
+        {"type": "image", "data": {"file": "abc.jpg", "url": "http://example.com/a.jpg", "summary": "[动画表情]"}},
+    ]
+    from nonebot.adapters.onebot.v11 import GroupMessageEvent
+
+    event = GroupMessageEvent.model_validate(event_dict)
+    before = len(harness.api_calls)
+    await harness.bot.handle_event(event)
+    texts = extract_texts(harness.api_calls[before:])
+    joined = "".join(texts)
+
+    assert "你想问点什么呢" not in joined
+    assert "/帮助" not in joined
+    assert "显示不出来" in joined or "图" in joined
+    # 没有文字时不该硬调 AI（避免花冤枉钱）
+    assert harness.ai.calls == []
+
+
+async def test_text_plus_image_still_asks_ai(harness) -> None:
+    """「图 + 一句话」的组合应该照常提问，图片数量要传给处理流程。"""
+    event_dict = harness.make_group_event("这张图什么意思", user_id=10001, group_id=555, at_me=True)
+    event_dict["message"] = [
+        {"type": "at", "data": {"qq": SELF_ID}},
+        {"type": "text", "data": {"text": " 这张图什么意思"}},
+        {"type": "image", "data": {"file": "x.jpg", "url": "http://example.com/x.jpg"}},
+    ]
+    from nonebot.adapters.onebot.v11 import GroupMessageEvent
+
+    event = GroupMessageEvent.model_validate(event_dict)
+    await harness.bot.handle_event(event)
+    assert harness.ai.calls, "带文字时应该正常调用 AI"
+    assert "这张图什么意思" in harness.ai.calls[-1][0]
 
 
 # ---------------------------------------------------------------------------

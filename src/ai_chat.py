@@ -21,6 +21,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import time
 
 from loguru import logger
@@ -31,6 +32,7 @@ from nonebot.rule import to_me
 
 from config import get_settings
 from src.ai_client import AIClient
+from src.web_fetch import FetchResult, build_context, fetch, find_urls
 from src.history import CooldownTracker, HistoryStore, build_history_store
 from src.message_handler import (
     build_help_text,
@@ -132,6 +134,18 @@ def _at(user_id: str) -> Message:
     return Message(MessageSegment.at(user_id))
 
 
+def _count_images(event: Event) -> int:
+    """数一条消息里带了几张图片/表情包。
+
+    纯表情包消息的纯文本是空的，如果不单独统计，就会被当成「什么都没发」。
+    """
+    try:
+        message = event.get_message()
+    except Exception:  # pragma: no cover - 防御性写法
+        return 0
+    return sum(1 for seg in message if getattr(seg, "type", "") == "image")
+
+
 async def _handle_question(
     event: Event,
     matcher: Matcher,
@@ -139,12 +153,15 @@ async def _handle_question(
     *,
     source: str,
     check_cooldown: bool = True,
+    image_count: int = 0,
 ) -> bool:
     """统一的「提问 -> 调 AI -> 回复」流程。
 
     :param check_cooldown: 是否检查冷却时间。
         被 @ 触发的兜底响应器传 ``False``——它是在
         :func:`_handle_mention` 里已经确认过冷却之后才调用的。
+    :param image_count: 本条消息夹带的图片/表情包数量。
+        当前还没接视觉模型，所以只把「发了图」这件事告诉模型，绝不假装看图。
 
     :return: 是否已经回复（``True`` 表示已经调用过 ``finish()``）
     """
@@ -172,25 +189,38 @@ async def _handle_question(
         return True
 
     question = normalize_question(question, _settings.max_question_length)
+
+    # 只有图片/表情包、没有文字：不再甩「AI 助手使用说明」那段话。
+    # 当前还没接视觉模型，所以用一句人话说过去，绝不假装看图。
     if not question:
-        await matcher.finish(
-            _at(user_id)
-            + MessageSegment.text(
-                " 你想问点什么呢？\n"
-                "• @我 后面直接跟问题\n"
-                "• 或者输入 /ai 你的问题\n"
-                "输入 /帮助 查看完整说明。"
+        if image_count > 0:
+            await matcher.finish(
+                _at(user_id)
+                + MessageSegment.text(" 嗯，图我这边显示不出来。你说说它是什么意思？")
             )
-        )
+        else:
+            await matcher.finish(_at(user_id) + MessageSegment.text(" ？你想说什么，我没听清。"))
         return True
 
     log_request(group_id, user_id, source=source, question=question)
     _cooldown.touch(group_id, user_id)
 
+    # --- 联网：消息里带链接就抓网页正文，作为【参考网页】喂给模型 ---
+    prompt = question
+    urls = find_urls(question)
+    if urls:
+        results = await asyncio.gather(*(fetch(u) for u in urls), return_exceptions=True)
+        fetched = [r for r in results if isinstance(r, FetchResult)]
+        if fetched:
+            context = build_context(fetched)
+            prompt = f"{question}\n\n{context}"
+            logger.info("已注入网页内容 链接数={} 上下文长度={}", len(fetched), len(context))
+
     started = time.monotonic()
     history = _history.get_messages(group_id, user_id)
     try:
-        result = await _ai_client.chat(question, history)
+        # prompt = 原问题（含链接时再追加【参考网页】），history 只存原始对话
+        result = await _ai_client.chat(prompt, history)
     except Exception as exc:  # noqa: BLE001 - 兜底，任何异常都不该让机器人挂掉
         logger.exception("AI 调用出现未预期异常：{}", type(exc).__name__)
         await matcher.finish(_at(user_id) + MessageSegment.text(" 机器人内部出错了，请稍后再试。"))
@@ -261,13 +291,13 @@ async def _handle_clear(event: Event, matcher: Matcher) -> None:
 async def _handle_ai_command(event: Event, matcher: Matcher) -> None:
     question = split_ai_command(_plain_text(event))
     # on_command 已经确认了命令名，这里正常情况下不会是 None
-    await _handle_question(event, matcher, question or "", source="指令")
+    await _handle_question(event, matcher, question or "", source="指令", image_count=_count_images(event))
 
 
 @matcher_ai_loose.handle()
 async def _handle_ai_command_loose(event: Event, matcher: Matcher) -> None:
     question = split_ai_command(_plain_text(event)) or ""
-    await _handle_question(event, matcher, question, source="指令")
+    await _handle_question(event, matcher, question, source="指令", image_count=_count_images(event))
 
 
 # ---------------------------------------------------------------------------
@@ -297,7 +327,14 @@ async def _handle_mention(bot: Bot, event: Event, matcher: Matcher) -> None:
 
     raw = _plain_text(event)
     question = extract_mention_question(raw, bot_self_id=str(getattr(bot, "self_id", "")))
-    await _handle_question(event, matcher, question, source="@提问", check_cooldown=False)
+    await _handle_question(
+        event,
+        matcher,
+        question,
+        source="@提问",
+        check_cooldown=False,
+        image_count=_count_images(event),
+    )
 
 
 __all__ = ["reload_plugin_state", "split_ai_command"]
