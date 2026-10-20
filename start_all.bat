@@ -10,7 +10,9 @@ chcp 65001 >nul
 cd /d "%~dp0"
 
 set "NAPCAT_DIR=C:\napcat\NapCat.52230.Shell"
-set "NAPCAT_BAT=napcat.bat"
+REM 用「快速登录」脚本启动：带 QQ 号复用本地会话，避免每次都扫码。
+REM 若哪天想手动扫码登录，把它临时改回 napcat.bat 即可。
+set "NAPCAT_BAT=napcat.quick.bat"
 set "NAPCAT_PORT=6099"
 
 echo ============================================================
