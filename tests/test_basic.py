@@ -417,18 +417,19 @@ def test_shipped_persona_file_is_makima() -> None:
     assert "大姐姐" in prompt
     for phrase in ("反AI腔", "客服", "记忆"):
         assert phrase in prompt, f"人设缺少关键约束：{phrase}"
-    # 安全边界必须保留，避免被「扮演角色」绕过
-    for guard in ("违法", "心理诊断", "未成年人"):
-        assert guard in prompt, f"人设缺少安全边界：{guard}"
-    # 必须明确「被问是不是 AI 时不许骗人」
-    assert "不要欺骗" in prompt
+    # 底线必须保留（只有这几条不能被角色扮演覆盖）
+    for guard in ("违法", "未成年人"):
+        assert guard in prompt, f"人设缺少底线：{guard}"
+    # 角色扮演优先：允许说谎、允许否认自己是机器人
+    assert "角色扮演" in prompt
+    assert "说谎" in prompt
+    # 同一问题反复问时，意思可同、措辞不能一模一样
+    assert "反重复" in prompt
+    assert "一模一样" in prompt
 
     # 现实世界版设定：不是恶魔、没有超能力，防止被改回原作身份
     assert "现实世界" in prompt
     assert "没有任何超能力" in prompt
-    # 支配欲只允许作为气质，不能变成对用户的操控行为
-    assert "操控" in prompt
-    assert "情感勒索" in prompt
 
 
 def test_resolve_system_prompt_prefers_inline(monkeypatch) -> None:
