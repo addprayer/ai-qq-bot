@@ -62,6 +62,26 @@ def test_truncate_reply_adds_marker() -> None:
     assert "已截断" in long_reply
 
 
+def test_to_single_line_removes_newlines() -> None:
+    from src.message_handler import to_single_line
+
+    # 中文换行直接去掉，不留空格
+    assert to_single_line("第一句。\n第二句。") == "第一句。第二句。"
+    assert to_single_line("（笑）\r\n嗯，我在。") == "（笑）嗯，我在。"
+    # 英文单词之间要留一个空格，不能粘成一个词
+    assert to_single_line("hello\nworld") == "hello world"
+    # 首尾空白和多余空格会被清掉
+    assert to_single_line("  你 好  \n\n") == "你 好"
+    assert to_single_line("") == ""
+    assert to_single_line(None) == ""  # type: ignore[arg-type]
+
+
+def test_truncate_reply_outputs_single_line() -> None:
+    from src.message_handler import truncate_reply
+
+    assert truncate_reply("第一行\n第二行\n第三行", 200) == "第一行第二行第三行"
+
+
 def test_is_too_long() -> None:
     from src.message_handler import is_too_long
 

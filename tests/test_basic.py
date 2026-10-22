@@ -503,11 +503,15 @@ def test_system_prompt_not_leaked_in_describe(settings) -> None:
 
 
 def _git(*args: str) -> subprocess.CompletedProcess[str]:
+    # git 输出的是 UTF-8（提交信息里有中文），Windows 默认按 GBK 解码会炸，
+    # 所以显式指定编码，解不了的字节用替换字符兜住。
     return subprocess.run(
         ["git", *args],
         cwd=PROJECT_ROOT,
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         check=False,
     )
 

@@ -13,6 +13,30 @@
 
 ---
 
+## [1.5.1] - 2026-10-22
+
+回复格式调整：机器人只说一句话，不再换行分段。
+
+### 变更
+
+- **`src/message_handler.py` 新增 `to_single_line()`**：把模型回复里的换行全部去掉。
+  中文换行直接删除（不留空格），只有英文/数字相邻时才补一个空格，避免单词粘连。
+- **`truncate_reply()` 内部先调用 `to_single_line()`**：所有对外发送的回复都会经过这里，
+  即使模型不听话输出了多行，发到群里也一定是一行。
+- **`personas/makima.txt` 输出要求改写**：明确「只说一句话，不换行、不分段、不列点」，
+  并在每轮自检里加了「是否换行分段」一项。
+- **`tests/test_basic.py` 修复 Git 历史扫描的编码 bug**：Windows 下 `subprocess` 默认按 GBK
+  解码 git 的 UTF-8 输出会失败并返回 `None`，改为显式 `encoding="utf-8"`。
+- **新增 2 个测试**：`test_to_single_line_removes_newlines`、
+  `test_truncate_reply_outputs_single_line`。测试总数 **118**。
+
+### 验证
+
+- `pytest`：118 passed
+- 真实 DeepSeek 调用 4 条提示词：原始换行数均为 0，输出均为单行，人设未跑偏
+
+---
+
 ## [1.5.0] - 2026-10-23
 
 人设重写：从「动漫角色」改成「现实世界版玛奇玛」。

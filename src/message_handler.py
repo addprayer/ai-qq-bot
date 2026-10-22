@@ -13,6 +13,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any, Final
 
 from loguru import logger
@@ -117,9 +118,32 @@ def is_too_long(text: str, limit: int = MAX_RAW_MESSAGE_LENGTH) -> bool:
     return len(text or "") > limit
 
 
-def truncate_reply(text: str, max_length: int) -> str:
-    """限制 AI 回复长度，超长则在末尾加省略提示。"""
+def to_single_line(text: str) -> str:
+    """把多行文本压成一行。
+
+    QQ 群里换行会把一句话拆得七零八落，人设也要求「一句话说完」，
+    所以这里统一处理：换行直接去掉；只有两侧都是英文/数字时才补一个空格，
+    避免把 ``hello`` 和 ``world`` 粘成一个词。
+    """
     text = (text or "").strip()
+    if not text:
+        return ""
+
+    def _repl(match: re.Match[str]) -> str:
+        left = match.string[match.start() - 1] if match.start() > 0 else ""
+        right = match.string[match.end()] if match.end() < len(match.string) else ""
+        if left.isascii() and right.isascii() and left.isalnum() and right.isalnum():
+            return " "
+        return ""
+
+    text = re.sub(r"[ \t]*[\r\n]+[ \t]*", _repl, text)
+    text = re.sub(r"[ \t]{2,}", " ", text)
+    return text.strip()
+
+
+def truncate_reply(text: str, max_length: int) -> str:
+    """限制 AI 回复长度，超长则在末尾加省略提示；同时保证输出是单行。"""
+    text = to_single_line(text)
     if max_length <= 0 or len(text) <= max_length:
         return text
     suffix = "…（内容过长已截断）"
@@ -195,5 +219,6 @@ __all__ = [
     "log_request",
     "normalize_question",
     "session_key",
+    "to_single_line",
     "truncate_reply",
 ]
