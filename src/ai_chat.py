@@ -117,6 +117,21 @@ matcher_ai_loose = on_message(rule=ai_command_rule, priority=6, block=True)
 #: 被 @ 时兜底响应
 matcher_mention = on_message(rule=to_me(), priority=10, block=True)
 
+#: 诊断用兜底：只写日志、不回复。用来区分「消息没到」和「消息到了但没触发」。
+#: 平时是 DEBUG 级别（LOG_LEVEL=DEBUG 才会看到），不影响正常使用。
+matcher_diag = on_message(priority=99, block=False)
+
+
+@matcher_diag.handle()
+async def _log_untriaged(event: Event) -> None:
+    group_id, user_id = _session_ids(event)
+    logger.debug(
+        "收到未触发消息 群={} 用户={} 文本={!r}",
+        group_id,
+        user_id,
+        _plain_text(event)[:60],
+    )
+
 
 # ---------------------------------------------------------------------------
 # 公共流程
@@ -177,6 +192,17 @@ async def _handle_question(
     """
     group_id, user_id = _session_ids(event)
     image_urls = image_urls or []
+
+    # 每条真正进入处理流程的消息都留一条记录，方便排查「为什么机器人不理我」：
+    # 如果这里没有日志，说明消息根本没到机器人，而不是 AI 出了问题。
+    logger.info(
+        "收到提问 来源={} 群={} 用户={} 字数={} 图片={}",
+        source,
+        group_id,
+        user_id,
+        len(question or ""),
+        len(image_urls),
+    )
 
     # --- 冷却检查 ---
     # 注意：这里不能用独立的「冷却响应器」，因为 block=True 的响应器

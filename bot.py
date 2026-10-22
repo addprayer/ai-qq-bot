@@ -101,7 +101,25 @@ nonebot.load_plugin("src.ai_chat")
 # ---------------------------------------------------------------------------
 # 4. 启动
 # ---------------------------------------------------------------------------
+def _port_in_use(host: str, port: int) -> bool:
+    """启动前先探一下端口，避免 uvicorn 抛一串英文报错才失败。"""
+    import socket
+
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.settimeout(0.5)
+        return sock.connect_ex((host, port)) == 0
+
+
 if __name__ == "__main__":
+    if _port_in_use(settings.host, settings.port):
+        print("=" * 70)
+        print(f"[启动失败] 端口 {settings.port} 已经被占用。")
+        print()
+        print("最常见的原因：已经有一个机器人在运行了（可能是之前开的窗口没关）。")
+        print("请先关掉那个机器人窗口（或者用任务管理器结束 python.exe），再重新启动。")
+        print("=" * 70)
+        raise SystemExit(1)
+
     logger.info("配置检查通过，开始监听 {}:{}", settings.host, settings.port)
     logger.info("NapCat 反向 WebSocket 地址： ws://{}:{}/onebot/v11/ws", settings.host, settings.port)
     logger.info("按 Ctrl+C 停止机器人")
