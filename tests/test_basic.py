@@ -423,6 +423,13 @@ def test_shipped_persona_file_is_makima() -> None:
     # 必须明确「被问是不是 AI 时不许骗人」
     assert "不要欺骗" in prompt
 
+    # 现实世界版设定：不是恶魔、没有超能力，防止被改回原作身份
+    assert "现实世界" in prompt
+    assert "没有任何超能力" in prompt
+    # 支配欲只允许作为气质，不能变成对用户的操控行为
+    assert "操控" in prompt
+    assert "情感勒索" in prompt
+
 
 def test_resolve_system_prompt_prefers_inline(monkeypatch) -> None:
     """内联提示词优先级最高，用来临时覆盖人设文件。"""
